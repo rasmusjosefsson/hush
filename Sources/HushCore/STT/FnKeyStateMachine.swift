@@ -1,0 +1,220 @@
+import Foundation
+
+/// Pure state machine for Fn key gesture detection.
+/// Detects double-tap (persistent mode) and hold (push-to-talk mode).
+/// Testable without CGEvent — operates on abstract key up/down events.
+public final class FnKeyStateMachine {
+    public enum State: Equatable {
+        case idle
+        case waitingForSecondTap        // Fn pressed once, waiting to see if double-tap
+        case persistent                 // Double-tap confirmed, recording
+        case waitingForSecondTapToStop  // Persistent: first tap to stop received, waiting for second
+        case holdToTalk                 // Held past threshold, recording
+        case cancelWindow               // Esc pressed, in undo window
+        case blocked                    // Fn blocked during cancel window
+    }
+
+    public enum Action: Equatable {
+        case none
+        case startRecording(mode: RecordingMode)
+        case stopRecording
+        case cancelRecording
+    }
+
+    public enum RecordingMode: Equatable {
+        case persistent   // Double-tap: stays on until explicitly stopped
+        case holdToTalk   // Hold: stops when Fn released
+    }
+
+    /// The 400ms threshold distinguishing taps from holds
+    public static let tapThresholdMs: Int = 400
+
+    /// Cancel window duration (5 seconds)
+    public static let cancelWindowMs: Int = 5000
+
+    public private(set) var state: State = .idle
+    private var fnDownTimestamp: UInt64 = 0  // milliseconds
+    private var firstTapTimestamp: UInt64 = 0  // milliseconds
+
+    /// When true, hotkey gestures cannot stop persistent recording.
+    /// The user must click the UI stop button instead.
+    public var persistentStopDisabled: Bool = false
+
+    public init() {}
+
+    /// Called when Fn key is pressed down
+    public func fnDown(timestampMs: UInt64) -> Action {
+        switch state {
+        case .idle:
+            fnDownTimestamp = timestampMs
+            state = .waitingForSecondTap
+            return .none
+
+        case .waitingForSecondTap:
+            // Second tap within threshold = double-tap
+            let elapsed = timestampMs - firstTapTimestamp
+            if elapsed <= Self.tapThresholdMs {
+                state = .persistent
+                return .startRecording(mode: .persistent)
+            } else {
+                // Too slow, treat as new first tap
+                fnDownTimestamp = timestampMs
+                return .none
+            }
+
+        case .persistent:
+            // When stop-via-UI-only is enabled, ignore hotkey during persistent recording
+            guard !persistentStopDisabled else { return .none }
+            // First tap to stop — wait for second tap to confirm
+            fnDownTimestamp = timestampMs
+            state = .waitingForSecondTapToStop
+            return .none
+
+        case .waitingForSecondTapToStop:
+            // Second tap within threshold = double-tap confirmed, stop
+            let elapsed = timestampMs - firstTapTimestamp
+            if elapsed <= Self.tapThresholdMs {
+                state = .idle
+                return .stopRecording
+            } else {
+                // Too slow — treat as new first tap to stop
+                fnDownTimestamp = timestampMs
+                return .none
+            }
+
+        case .holdToTalk:
+            // Shouldn't happen (Fn is already held)
+            return .none
+
+        case .cancelWindow, .blocked:
+            // Fn blocked during cancel window
+            state = .blocked
+            return .none
+        }
+    }
+
+    /// Called when Fn key is released
+    public func fnUp(timestampMs: UInt64) -> Action {
+        switch state {
+        case .waitingForSecondTap:
+            let holdDuration = timestampMs - fnDownTimestamp
+            if holdDuration >= Self.tapThresholdMs {
+                // Held past threshold but holdTimerFired() never ran (main thread was busy).
+                // Reset to idle to avoid misclassifying a long hold as the first tap
+                // of a double-tap, which would arm persistent dictation on the next press.
+                state = .idle
+                return .none
+            }
+            // Quick release = first tap of potential double-tap
+            firstTapTimestamp = timestampMs
+            return .none
+
+        case .waitingForSecondTapToStop:
+            let holdDuration = timestampMs - fnDownTimestamp
+            if holdDuration >= Self.tapThresholdMs {
+                // Held past threshold — not a tap, return to persistent recording
+                state = .persistent
+                return .none
+            }
+            // Quick release = first tap of potential double-tap to stop
+            firstTapTimestamp = timestampMs
+            return .none
+
+        case .holdToTalk:
+            // Release during hold-to-talk = stop and paste
+            state = .idle
+            return .stopRecording
+
+        case .blocked:
+            state = .cancelWindow
+            return .none
+
+        default:
+            return .none
+        }
+    }
+
+    /// Called when the 400ms timer fires (Fn is still held)
+    public func holdTimerFired() -> Action {
+        switch state {
+        case .waitingForSecondTap:
+            // Fn held past threshold = hold-to-talk mode
+            state = .holdToTalk
+            return .startRecording(mode: .holdToTalk)
+        case .waitingForSecondTapToStop:
+            // Fn held past threshold while trying to stop — not a tap, resume persistent
+            state = .persistent
+            return .none
+        default:
+            return .none
+        }
+    }
+
+    /// Called when Escape is pressed during recording or cancel window
+    public func escapePressed() -> Action {
+        switch state {
+        case .persistent:
+            // When stop-via-UI-only is enabled, ignore Escape during persistent recording
+            guard !persistentStopDisabled else { return .none }
+            state = .cancelWindow
+            return .cancelRecording
+        case .waitingForSecondTapToStop, .holdToTalk:
+            state = .cancelWindow
+            return .cancelRecording
+        case .cancelWindow, .blocked:
+            // Escape during undo countdown = confirm cancel immediately
+            state = .idle
+            return .cancelRecording
+        default:
+            return .none
+        }
+    }
+
+    /// Called when the cancel window expires
+    public func cancelWindowExpired() -> Action {
+        if state == .cancelWindow || state == .blocked {
+            state = .idle
+        }
+        return .none
+    }
+
+    /// Called when the user taps "Undo" during cancel window
+    public func undoPressed() -> Action {
+        if state == .cancelWindow || state == .blocked {
+            state = .idle
+        }
+        return .none
+    }
+
+    /// Called when cancel is triggered via UI button (not Esc key).
+    /// Transitions to cancelWindow so Fn is blocked during the countdown.
+    public func cancelledByUI() {
+        if state == .persistent || state == .waitingForSecondTapToStop || state == .holdToTalk {
+            state = .cancelWindow
+        }
+    }
+
+    /// Resume recording after undo — sets the state machine to the active recording mode
+    /// so Fn key gestures work correctly.
+    public func resumeRecording(mode: RecordingMode) {
+        switch mode {
+        case .persistent: state = .persistent
+        case .holdToTalk: state = .holdToTalk
+        }
+    }
+
+    /// Reset to idle (for testing or error recovery)
+    public func reset() {
+        state = .idle
+        fnDownTimestamp = 0
+        firstTapTimestamp = 0
+    }
+
+    /// Abort the stop gesture (e.g. a regular key was typed while waiting for second tap to stop).
+    /// Returns to persistent recording instead of resetting to idle.
+    public func abortStopGesture() {
+        if state == .waitingForSecondTapToStop {
+            state = .persistent
+        }
+    }
+}

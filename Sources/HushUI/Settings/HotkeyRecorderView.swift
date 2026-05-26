@@ -1,0 +1,256 @@
+import SwiftUI
+import HushCore
+
+/// "Record a shortcut" UI for hotkey selection.
+/// Normal state:    [ fn Fn              Change... ]
+/// Recording state: [ Press any key...   Cancel    ]  (highlighted border)
+/// With warning:    [ Space              Change... ]
+///                    Warning text shown below.
+public struct HotkeyRecorderView: View {
+    @Binding var trigger: HotkeyTrigger
+    @State private var isRecording = false
+    @State private var validationMessage: String?
+    @State private var validationIsBlocked = false
+    @State private var eventMonitor: Any?
+    /// Tracks held modifiers during recording for two-phase chord capture.
+    @State private var pendingModifiers: [String] = []
+    /// Tracks the peak set of modifiers held simultaneously (for multi-modifier detection).
+    @State private var peakModifiers: [String] = []
+
+    public init(trigger: Binding<HotkeyTrigger>) {
+        self._trigger = trigger
+    }
+
+    public var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            if isRecording {
+                recordingView
+            } else {
+                normalView
+            }
+
+            if let message = validationMessage, !isRecording {
+                HStack(spacing: 4) {
+                    Image(systemName: validationIsBlocked ? "xmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .font(.system(size: 10))
+                    Text(message)
+                        .font(DesignSystem.Typography.micro)
+                }
+                .foregroundStyle(validationIsBlocked ? DesignSystem.Colors.errorRed : DesignSystem.Colors.warningAmber)
+            }
+        }
+        .onDisappear {
+            stopRecording()
+        }
+    }
+
+    // MARK: - Normal State
+
+    private var normalView: some View {
+        HStack(spacing: 8) {
+            Text("\(trigger.shortSymbol) \(trigger.displayName)")
+                .font(DesignSystem.Typography.body)
+                .foregroundStyle(.primary)
+
+            Button("Change...") {
+                startRecording()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+        }
+    }
+
+    // MARK: - Recording State
+
+    private var recordingView: some View {
+        HStack(spacing: 8) {
+            if pendingModifiers.isEmpty {
+                Text("Press any key...")
+                    .font(DesignSystem.Typography.body)
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(pendingModifierSymbols + "...")
+                    .font(DesignSystem.Typography.body)
+                    .foregroundStyle(.primary)
+            }
+
+            Button("Cancel") {
+                stopRecording()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.regular)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(DesignSystem.Colors.accent.opacity(0.5), lineWidth: 1.5)
+        )
+    }
+
+    /// Symbols for currently held modifiers in standard macOS order (⌃⌥⇧⌘).
+    private var pendingModifierSymbols: String {
+        let order = ["control", "option", "shift", "command"]
+        let symbols: [String: String] = ["control": "⌃", "option": "⌥", "shift": "⇧", "command": "⌘"]
+        return order.filter { pendingModifiers.contains($0) }
+            .compactMap { symbols[$0] }
+            .joined()
+    }
+
+    // MARK: - Recording Logic
+
+    private func startRecording() {
+        // Guard against double-start leaking the existing monitor
+        if eventMonitor != nil { stopRecording() }
+
+        isRecording = true
+        validationMessage = nil
+        validationIsBlocked = false
+        pendingModifiers = []
+        peakModifiers = []
+
+        eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged]) { [self] event in
+            if event.type == .keyDown {
+                let keyCode = event.keyCode
+
+                // Escape cancels recording mode
+                if keyCode == 53 {
+                    stopRecording()
+                    return nil
+                }
+
+                // Check if chord modifiers are held (Cmd, Ctrl, Option, Shift — excluding Fn/Caps Lock)
+                let heldModifiers = chordModifiersFromFlags(event.modifierFlags)
+
+                if !heldModifiers.isEmpty {
+                    // Chord: modifier(s) + key
+                    let candidate = HotkeyTrigger.chord(modifiers: heldModifiers, keyCode: keyCode)
+                    switch candidate.validation {
+                    case .blocked(let msg):
+                        pendingModifiers = []
+                        validationMessage = msg
+                        validationIsBlocked = true
+                        return nil
+                    case .warned(let msg):
+                        acceptTrigger(candidate, warning: msg)
+                        return nil
+                    case .allowed:
+                        acceptTrigger(candidate, warning: nil)
+                        return nil
+                    }
+                } else {
+                    // Bare key (no modifiers held)
+                    let candidate = HotkeyTrigger.fromKeyCode(keyCode)
+                    switch candidate.validation {
+                    case .blocked(let msg):
+                        validationMessage = msg
+                        validationIsBlocked = true
+                        return nil
+                    case .warned(let msg):
+                        acceptTrigger(candidate, warning: msg)
+                        return nil
+                    case .allowed:
+                        acceptTrigger(candidate, warning: nil)
+                        return nil
+                    }
+                }
+            } else if event.type == .flagsChanged {
+                // Identify which modifier key changed
+                let modifierName: String? = switch event.keyCode {
+                case 63, 179:  "fn"       // Fn/Globe
+                case 59, 62:   "control"  // Left/Right Control
+                case 58, 61:   "option"   // Left/Right Option
+                case 56, 60:   "shift"    // Left/Right Shift
+                case 55, 54:   "command"  // Left/Right Command
+                default:       nil
+                }
+
+                if let name = modifierName {
+                    if name == "fn" {
+                        // Fn is bare modifier only — accept immediately on key-down
+                        if event.modifierFlags.contains(.function) {
+                            acceptTrigger(.fn, warning: nil)
+                            return event
+                        }
+                    } else {
+                        // Track held chord modifiers for preview
+                        let currentHeld = chordModifiersFromFlags(event.modifierFlags)
+
+                        // Track peak modifiers (largest set held simultaneously)
+                        if currentHeld.count > peakModifiers.count {
+                            peakModifiers = currentHeld
+                        }
+
+                        // Check if all modifiers were just released
+                        if currentHeld.isEmpty && !pendingModifiers.isEmpty {
+                            if peakModifiers.count > 1 {
+                                // Multiple modifiers were held — accept as multi-modifier trigger
+                                let candidate = HotkeyTrigger.multiModifier(modifiers: peakModifiers)
+                                peakModifiers = []
+                                acceptTrigger(candidate, warning: nil)
+                                return event
+                            } else if let candidate = bareModifierTrigger(for: name) {
+                                peakModifiers = []
+                                acceptTrigger(candidate, warning: nil)
+                                return event
+                            }
+                        }
+
+                        pendingModifiers = currentHeld
+                    }
+                }
+            }
+            return event
+        }
+    }
+
+    /// Extract chord-eligible modifier names from NSEvent modifier flags.
+    /// Excludes Fn (bare modifier only per plan).
+    private func chordModifiersFromFlags(_ flags: NSEvent.ModifierFlags) -> [String] {
+        var modifiers: [String] = []
+        if flags.contains(.control) { modifiers.append("control") }
+        if flags.contains(.option) { modifiers.append("option") }
+        if flags.contains(.shift) { modifiers.append("shift") }
+        if flags.contains(.command) { modifiers.append("command") }
+        return modifiers
+    }
+
+    /// Map a modifier name to its bare modifier trigger.
+    private func bareModifierTrigger(for name: String) -> HotkeyTrigger? {
+        switch name {
+        case "control": return .control
+        case "option": return .option
+        case "shift": return .shift
+        case "command": return .command
+        default: return nil
+        }
+    }
+
+    private func stopRecording() {
+        isRecording = false
+        if let monitor = eventMonitor {
+            NSEvent.removeMonitor(monitor)
+            eventMonitor = nil
+        }
+    }
+
+    private func acceptTrigger(_ candidate: HotkeyTrigger, warning: String?) {
+        trigger = candidate
+        validationMessage = warning
+        validationIsBlocked = false
+        stopRecording()
+    }
+}
+
+// MARK: - Preview
+
+struct HotkeyRecorderView_Previews: PreviewProvider {
+    static var previews: some View {
+        VStack(spacing: 20) {
+            HotkeyRecorderView(trigger: .constant(.fn))
+            HotkeyRecorderView(trigger: .constant(.control))
+        }
+        .padding()
+        .background(Color(nsColor: .windowBackgroundColor))
+    }
+}
