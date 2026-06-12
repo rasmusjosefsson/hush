@@ -27,6 +27,20 @@ Local, private dictation and meeting recording for macOS. Push-to-talk speech-to
 
 ## Install
 
+### Download the prebuilt DMG
+
+Grab the latest `Hush-<version>.dmg` from the [Releases page](https://github.com/rasmusjosefsson/hush/releases/latest) and drag `Hush.app` into `/Applications`.
+
+Builds are **ad-hoc signed**, not notarized (no Apple Developer ID). On first launch macOS will refuse to open the app. To allow it:
+
+- Right-click `Hush.app` → **Open** → **Open** in the dialog, **or**
+- Run once in Terminal:
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/Hush.app
+  ```
+
+Apple Silicon only (arm64, macOS 14+).
+
 ### Run the GUI app from source
 
 ```bash
