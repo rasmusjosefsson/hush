@@ -1,10 +1,9 @@
+
+<img width="2912" height="1464" alt="Gemini_Generated_Image_mef3e2mef3e2mef3" src="https://github.com/user-attachments/assets/1c0d7324-9d8f-445a-aff3-78a8287353e4" />
+
 # Hush
 
 Local, private dictation and meeting recording for macOS. Push-to-talk speech-to-text that pastes into any app, plus full meeting capture (mic + system audio) with on-device transcription and speaker diarization. Nothing leaves your machine.
-
-<p align="center">
-  <img src="Assets/menubar-icon-preview.png" alt="Hush menubar icon" width="120" />
-</p>
 
 ## Features
 
