@@ -48,7 +48,9 @@ public actor DiarizationService: DiarizationServiceProtocol {
     public func diarize(audioURL: URL) async throws -> HushDiarizationResult {
         let fluidResult: DiarizationResult
         do {
-            fluidResult = try await manager.process(audioURL)
+            fluidResult = try await NeuralEngineInferenceGate.shared.withExclusiveAccess {
+                try await manager.process(audioURL)
+            }
         } catch let error as OfflineDiarizationError where error.isNoSpeechDetected {
             return HushDiarizationResult(segments: [], speakerCount: 0, speakers: [])
         }
@@ -87,7 +89,9 @@ public actor DiarizationService: DiarizationServiceProtocol {
 
     public func prepareModels(onProgress: (@Sendable (String) -> Void)? = nil) async throws {
         onProgress?("Downloading speaker models...")
-        try await manager.prepareModels()
+        try await NeuralEngineInferenceGate.shared.withExclusiveAccess {
+            try await manager.prepareModels()
+        }
         modelsReady = true
         onProgress?("Speaker models ready")
     }

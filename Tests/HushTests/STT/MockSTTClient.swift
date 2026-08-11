@@ -6,6 +6,7 @@ public actor MockSTTClient: STTClientProtocol {
     public var transcribeError: Error?
     public var transcribeCallCount = 0
     public var lastAudioPath: String?
+    public var lastJob: STTJobKind?
     public var warmUpCalled = false
     public var warmUpCallCount = 0
     public var warmUpError: Error?
@@ -42,6 +43,7 @@ public actor MockSTTClient: STTClientProtocol {
     ) async throws -> STTResult {
         transcribeCallCount += 1
         lastAudioPath = audioPath
+        lastJob = job
 
         if let error = transcribeError {
             throw error

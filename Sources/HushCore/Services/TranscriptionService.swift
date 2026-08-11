@@ -94,7 +94,11 @@ public actor TranscriptionService: TranscriptionServiceProtocol {
                     callback(.transcribing(percent: min(pct, 99)))
                 }
             }
-            let result = try await sttClient.transcribe(audioPath: wavURL.path, onProgress: sttProgress)
+            let result = try await sttClient.transcribe(
+                audioPath: wavURL.path,
+                job: .fileTranscription,
+                onProgress: sttProgress
+            )
 
             let words = result.words.map { word in
                 WordTimestamp(

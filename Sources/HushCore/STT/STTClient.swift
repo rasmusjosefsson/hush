@@ -48,10 +48,17 @@ public actor FluidAudioClient: STTClientProtocol {
 
         do {
             try Task.checkCancellation()
-            let result = try await {
-                var decoderState = TdtDecoderState.make()
+            let paddedSamples = ParakeetDictationAudioPadding.samplesIfEligible(
+                audioPath: audioPath,
+                job: job
+            )
+            var decoderState = TdtDecoderState.make()
+            let result = try await NeuralEngineInferenceGate.shared.withExclusiveAccess {
+                if let paddedSamples {
+                    return try await manager.transcribe(paddedSamples, decoderState: &decoderState)
+                }
                 return try await manager.transcribe(audioURL, decoderState: &decoderState)
-            }()
+            }
             let words = Self.mergeTokenTimingsIntoWords(result.tokenTimings)
             onProgress?(100, 100)
             return STTResult(text: result.text, words: words)
@@ -166,7 +173,9 @@ public actor FluidAudioClient: STTClientProtocol {
                 version: version,
                 progressHandler: progressHandler
             )
-            let asrManager = AsrManager(config: .default)
+            let asrManager = AsrManager(
+                config: ParakeetRuntimeConfiguration.managerConfigForCurrentOS
+            )
             try await asrManager.loadModels(downloadedModels)
             await completeInitialization(models: downloadedModels, manager: asrManager)
         }

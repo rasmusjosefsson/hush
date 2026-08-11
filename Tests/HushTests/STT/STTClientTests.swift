@@ -86,4 +86,10 @@ final class STTClientTests: XCTestCase {
         XCTAssertTrue(called)
     }
 
+    func testWhisperTranscriptionErrorPreservesCancellation() {
+        let mapped = WhisperKitClient.transcriptionError(from: CancellationError())
+
+        XCTAssertTrue(mapped is CancellationError)
+    }
+
 }

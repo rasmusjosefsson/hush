@@ -104,4 +104,13 @@ final class TranscriptionServiceTests: XCTestCase {
         let lastURL = await mockAudio.lastConvertURL
         XCTAssertEqual(lastURL?.path, "/tmp/test.mp3")
     }
+
+    func testTranscribeFileUsesFileTranscriptionJob() async throws {
+        await mockSTT.configure(result: STTResult(text: "Hello"))
+
+        _ = try await service.transcribe(fileURL: URL(fileURLWithPath: "/tmp/test.mp3"))
+
+        let job = await mockSTT.lastJob
+        XCTAssertEqual(job, .fileTranscription)
+    }
 }

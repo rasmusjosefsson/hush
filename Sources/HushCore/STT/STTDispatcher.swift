@@ -9,6 +9,7 @@ public actor STTDispatcher: STTClientProtocol {
     private let backendFactory: BackendFactory
     private var currentBackend: (any STTClientProtocol)?
     private var currentModelID: String?
+    private var backendGeneration: UInt64 = 0
 
     public init(
         registry: ModelRegistry,
@@ -23,7 +24,7 @@ public actor STTDispatcher: STTClientProtocol {
         { model in
             switch model.engineType {
             case .fluidAudio:
-                return FluidAudioClient()
+                return STTScheduler()
             case .whisperKit:
                 let variant = model.variant ?? String(model.id.dropFirst("whisper-".count))
                 return WhisperKitClient(modelVariant: variant)
@@ -36,14 +37,15 @@ public actor STTDispatcher: STTClientProtocol {
     }
 
     public func switchModel(to modelID: String) async {
-        guard modelID != currentModelID else { return }
-        // Shut down current backend
-        if let backend = currentBackend {
-            await backend.shutdown()
-        }
+        guard registry.model(for: modelID) != nil else { return }
+        guard modelID != currentModelID || registry.selectedModel.id != modelID else { return }
+
+        let staleBackend = currentBackend
         currentBackend = nil
         currentModelID = nil
+        backendGeneration &+= 1
         registry.selectModel(id: modelID)
+        await staleBackend?.shutdown()
     }
 
     public func transcribe(audioPath: String, job: STTJobKind = .dictation, onProgress: (@Sendable (Int, Int) -> Void)?) async throws -> STTResult {
@@ -62,11 +64,14 @@ public actor STTDispatcher: STTClientProtocol {
     }
 
     public func clearModelCache() async {
-        if let backend = currentBackend {
-            await backend.clearModelCache()
-        }
+        guard let backend = currentBackend else { return }
+        let generation = backendGeneration
+        await backend.clearModelCache()
+
+        guard generation == backendGeneration else { return }
         currentBackend = nil
         currentModelID = nil
+        backendGeneration &+= 1
     }
 
     public func backgroundWarmUp() async {
@@ -87,29 +92,42 @@ public actor STTDispatcher: STTClientProtocol {
     }
 
     public func shutdown() async {
-        if let backend = currentBackend {
-            await backend.shutdown()
-        }
+        guard let backend = currentBackend else { return }
+        let generation = backendGeneration
+        await backend.shutdown()
+
+        guard generation == backendGeneration else { return }
         currentBackend = nil
         currentModelID = nil
+        backendGeneration &+= 1
     }
 
     // MARK: - Private
 
     private func ensureBackend() async throws -> any STTClientProtocol {
-        let model = registry.selectedModel
-        if let backend = currentBackend, currentModelID == model.id {
+        while true {
+            let requestedModel = registry.selectedModel
+            if let backend = currentBackend,
+               currentModelID == requestedModel.id {
+                return backend
+            }
+
+            if let staleBackend = currentBackend {
+                currentBackend = nil
+                currentModelID = nil
+                backendGeneration &+= 1
+                await staleBackend.shutdown()
+                continue
+            }
+
+            let latestModel = registry.selectedModel
+            guard latestModel.id == requestedModel.id else { continue }
+
+            let backend = backendFactory(latestModel)
+            currentBackend = backend
+            currentModelID = latestModel.id
+            backendGeneration &+= 1
             return backend
         }
-
-        // Shut down stale backend if model changed
-        if let backend = currentBackend {
-            await backend.shutdown()
-        }
-
-        let backend = backendFactory(model)
-        currentBackend = backend
-        currentModelID = model.id
-        return backend
     }
 }

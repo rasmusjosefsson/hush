@@ -25,8 +25,11 @@ public actor WhisperKitClient: STTClientProtocol {
         onProgress?(0, 100)
 
         do {
+            try Task.checkCancellation()
             let options = DecodingOptions(wordTimestamps: true)
-            let results: [TranscriptionResult] = try await kit.transcribe(audioPath: audioPath, decodeOptions: options)
+            let results: [TranscriptionResult] = try await NeuralEngineInferenceGate.shared.withExclusiveAccess {
+                try await kit.transcribe(audioPath: audioPath, decodeOptions: options)
+            }
             guard let result = results.first else {
                 throw STTError.invalidResponse
             }
@@ -42,10 +45,8 @@ public actor WhisperKitClient: STTClientProtocol {
 
             onProgress?(100, 100)
             return STTResult(text: result.text, words: words)
-        } catch let error as STTError {
-            throw error
         } catch {
-            throw STTError.transcriptionFailed(error.localizedDescription)
+            throw Self.transcriptionError(from: error)
         }
     }
 
@@ -88,6 +89,12 @@ public actor WhisperKitClient: STTClientProtocol {
     }
 
     public func removeWarmUpObserver(id: UUID) async {
+    }
+
+    static func transcriptionError(from error: Error) -> Error {
+        if error is CancellationError { return CancellationError() }
+        if let sttError = error as? STTError { return sttError }
+        return STTError.transcriptionFailed(error.localizedDescription)
     }
 
     /// Check if a WhisperKit model variant is already downloaded on disk.

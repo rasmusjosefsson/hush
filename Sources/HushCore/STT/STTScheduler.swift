@@ -1,5 +1,6 @@
 import Foundation
 import OSLog
+import os
 
 public enum STTSchedulerError: Error, LocalizedError, Equatable {
     case droppedDueToBackpressure(job: STTJobKind)
@@ -15,6 +16,18 @@ public enum STTSchedulerError: Error, LocalizedError, Equatable {
     }
 }
 
+private final class STTJobCancellation: @unchecked Sendable {
+    private let state = OSAllocatedUnfairLock(initialState: false)
+
+    var isCancelled: Bool {
+        state.withLock { $0 }
+    }
+
+    func cancel() {
+        state.withLock { $0 = true }
+    }
+}
+
 /// Centralized broker for all STT work in the app process.
 ///
 /// Jobs execute independently per slot so dictation can remain responsive while
@@ -26,6 +39,7 @@ public actor STTScheduler: STTManaging {
         let job: STTJobKind
         let enqueueOrder: UInt64
         let onProgress: (@Sendable (Int, Int) -> Void)?
+        let cancellation: STTJobCancellation
 
         var slot: SchedulerSlot {
             SchedulerSlot(job: job)
@@ -39,6 +53,16 @@ public actor STTScheduler: STTManaging {
         var currentWaitTask: Task<Void, Never>?
     }
 
+    private struct CacheClearOperation {
+        let id: UUID
+        let task: Task<Void, Never>
+    }
+
+    private struct ShutdownOperation {
+        let id: UUID
+        let task: Task<Void, Never>
+    }
+
     private let logger = Logger(subsystem: "com.hush.core", category: "STTScheduler")
     private let runtime: STTRuntimeProtocol
     private let meetingLiveChunkBacklogLimit: Int
@@ -48,8 +72,10 @@ public actor STTScheduler: STTManaging {
     private var slotStates: [SchedulerSlot: SlotState] = Dictionary(
         uniqueKeysWithValues: SchedulerSlot.allCases.map { ($0, SlotState()) }
     )
-    private var cancelledJobIDs: Set<UUID> = []
     private var acceptsNewJobs = true
+    private var cacheClearOperation: CacheClearOperation?
+    private var shutdownOperation: ShutdownOperation?
+    private var isPermanentlyShutDown = false
 
     /// - Parameter meetingLiveChunkBacklogLimit: Maximum pending live-preview chunks before the
     ///   oldest is dropped. 120 ≈ 4 minutes of dual-source 5-second chunks emitted every ~4
@@ -76,6 +102,7 @@ public actor STTScheduler: STTManaging {
         onProgress: (@Sendable (Int, Int) -> Void)? = nil
     ) async throws -> STTResult {
         let id = UUID()
+        let cancellation = STTJobCancellation()
         try Task.checkCancellation()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -85,12 +112,14 @@ public actor STTScheduler: STTManaging {
                         audioPath: audioPath,
                         job: job,
                         enqueueOrder: nextEnqueueOrder(),
-                        onProgress: onProgress
+                        onProgress: onProgress,
+                        cancellation: cancellation
                     ),
                     continuation: continuation
                 )
             }
         } onCancel: {
+            cancellation.cancel()
             Task { [weak self] in
                 await self?.cancel(jobID: id)
             }
@@ -98,10 +127,12 @@ public actor STTScheduler: STTManaging {
     }
 
     public func warmUp(onProgress: (@Sendable (String) -> Void)?) async throws {
+        guard acceptsNewJobs else { throw STTSchedulerError.unavailable }
         try await runtime.warmUp(onProgress: onProgress)
     }
 
     public func backgroundWarmUp() async {
+        guard acceptsNewJobs else { return }
         await runtime.backgroundWarmUp()
     }
 
@@ -118,20 +149,46 @@ public actor STTScheduler: STTManaging {
     }
 
     public func clearModelCache() async {
-        await quiesce(restoreAcceptsNewJobs: true)
-        await runtime.clearModelCache()
+        guard !isPermanentlyShutDown else { return }
+        if let cacheClearOperation {
+            await cacheClearOperation.task.value
+            return
+        }
+
+        acceptsNewJobs = false
+        let operationID = UUID()
+        let task = Task {
+            await self.performCacheClear(operationID: operationID)
+        }
+        cacheClearOperation = CacheClearOperation(id: operationID, task: task)
+        await task.value
     }
 
     public func shutdown() async {
-        await quiesce(restoreAcceptsNewJobs: false)
-        await runtime.shutdown()
+        if let shutdownOperation {
+            await shutdownOperation.task.value
+            return
+        }
+        guard !isPermanentlyShutDown else { return }
+        isPermanentlyShutDown = true
+        acceptsNewJobs = false
+
+        let operationID = UUID()
+        let task = Task {
+            await self.performShutdown()
+        }
+        shutdownOperation = ShutdownOperation(id: operationID, task: task)
+        await task.value
+        if shutdownOperation?.id == operationID {
+            shutdownOperation = nil
+        }
     }
 
     private func enqueue(
         _ job: ScheduledJob,
         continuation: CheckedContinuation<STTResult, Error>
     ) {
-        if Task.isCancelled || cancelledJobIDs.remove(job.id) != nil {
+        if job.cancellation.isCancelled {
             continuation.resume(throwing: CancellationError())
             return
         }
@@ -150,8 +207,11 @@ public actor STTScheduler: STTManaging {
             logger.notice(
                 "stt_backpressure drop_pending_meeting_live_chunk id=\(droppedJob.id.uuidString, privacy: .public)"
             )
+            let droppedError: Error = droppedJob.cancellation.isCancelled
+                ? CancellationError()
+                : STTSchedulerError.droppedDueToBackpressure(job: .meetingLiveChunk)
             continuations.removeValue(forKey: droppedJob.id)?.resume(
-                throwing: STTSchedulerError.droppedDueToBackpressure(job: .meetingLiveChunk)
+                throwing: droppedError
             )
         }
 
@@ -194,18 +254,30 @@ public actor STTScheduler: STTManaging {
     private func startNextJobIfNeeded(in slot: SchedulerSlot) {
         var currentSlotState = slotState(for: slot)
         guard currentSlotState.currentJob == nil else { return }
-        guard let next = dequeueNextJob(in: &currentSlotState) else {
+
+        while let next = dequeueNextJob(in: &currentSlotState) {
+            if next.cancellation.isCancelled {
+                continuations.removeValue(forKey: next.id)?.resume(
+                    throwing: CancellationError()
+                )
+                continue
+            }
+
+            currentSlotState.currentJob = next
+            currentSlotState.currentExecutionTask = Task {
+                try await runtime.transcribe(
+                    audioPath: next.audioPath,
+                    job: next.job,
+                    onProgress: next.onProgress
+                )
+            }
+            currentSlotState.currentWaitTask = Task { [weak self] in
+                await self?.awaitCurrentJobCompletion(jobID: next.id, in: slot)
+            }
             setSlotState(currentSlotState, for: slot)
             return
         }
 
-        currentSlotState.currentJob = next
-        currentSlotState.currentExecutionTask = Task {
-            try await runtime.transcribe(audioPath: next.audioPath, job: next.job, onProgress: next.onProgress)
-        }
-        currentSlotState.currentWaitTask = Task { [weak self] in
-            await self?.awaitCurrentJobCompletion(jobID: next.id, in: slot)
-        }
         setSlotState(currentSlotState, for: slot)
     }
 
@@ -242,17 +314,21 @@ public actor STTScheduler: STTManaging {
         guard slotState.currentJob?.id == jobID else { return }
 
         let continuation = continuations.removeValue(forKey: jobID)
-        cancelledJobIDs.remove(jobID)
+        let jobWasCancelled = slotState.currentJob?.cancellation.isCancelled == true
         slotState.currentJob = nil
         slotState.currentExecutionTask = nil
         slotState.currentWaitTask = nil
         setSlotState(slotState, for: slot)
 
-        switch result {
-        case .success(let value):
-            continuation?.resume(returning: value)
-        case .failure(let error):
-            continuation?.resume(throwing: error)
+        if jobWasCancelled {
+            continuation?.resume(throwing: CancellationError())
+        } else {
+            switch result {
+            case .success(let value):
+                continuation?.resume(returning: value)
+            case .failure(let error):
+                continuation?.resume(throwing: error)
+            }
         }
 
         startNextJobIfNeeded(in: slot)
@@ -264,20 +340,16 @@ public actor STTScheduler: STTManaging {
             if let index = currentSlotState.pendingJobs.firstIndex(where: { $0.id == jobID }) {
                 currentSlotState.pendingJobs.remove(at: index)
                 setSlotState(currentSlotState, for: slot)
-                cancelledJobIDs.remove(jobID)
                 continuations.removeValue(forKey: jobID)?.resume(throwing: CancellationError())
                 return
             }
 
             if currentSlotState.currentJob?.id == jobID {
                 currentSlotState.currentExecutionTask?.cancel()
-                cancelledJobIDs.remove(jobID)
                 setSlotState(currentSlotState, for: slot)
                 return
             }
         }
-
-        cancelledJobIDs.insert(jobID)
     }
 
     private func cancelAllPendingJobs() {
@@ -292,18 +364,37 @@ public actor STTScheduler: STTManaging {
         }
     }
 
-    private func quiesce(restoreAcceptsNewJobs: Bool) async {
+    private func performCacheClear(operationID: UUID) async {
+        await quiesce()
+        if !isPermanentlyShutDown {
+            await runtime.clearModelCache()
+        }
+
+        guard cacheClearOperation?.id == operationID else { return }
+        cacheClearOperation = nil
+        if !isPermanentlyShutDown {
+            acceptsNewJobs = true
+        }
+    }
+
+    private func performShutdown() async {
+        await quiesce()
+        if let cacheClearOperation {
+            await cacheClearOperation.task.value
+        }
+        await runtime.shutdown()
+    }
+
+    private func quiesce() async {
         acceptsNewJobs = false
         cancelAllPendingJobs()
         await cancelAndDrainRunningJobs()
-        if restoreAcceptsNewJobs {
-            acceptsNewJobs = true
-        }
     }
 
     private func cancelAndDrainRunningJobs() async {
         let waitTasks = SchedulerSlot.allCases.compactMap { slot -> Task<Void, Never>? in
             let slotState = slotState(for: slot)
+            slotState.currentJob?.cancellation.cancel()
             slotState.currentExecutionTask?.cancel()
             return slotState.currentWaitTask
         }

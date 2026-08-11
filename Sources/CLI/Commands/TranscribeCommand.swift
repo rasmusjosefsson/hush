@@ -21,7 +21,7 @@ struct TranscribeCommand: AsyncParsableCommand {
         let transcriptionRepo = TranscriptionRepository(dbQueue: db.dbQueue)
         let customWordRepo = CustomWordRepository(dbQueue: db.dbQueue)
         let snippetRepo = TextSnippetRepository(dbQueue: db.dbQueue)
-        let sttClient = FluidAudioClient()
+        let sttClient = STTScheduler()
         let audioProcessor = AudioProcessor()
 
         let diarizationService: DiarizationService? = diarize ? DiarizationService() : nil
