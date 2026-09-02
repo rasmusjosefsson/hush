@@ -3,7 +3,7 @@ import CoreAudio
 import Foundation
 import OSLog
 
-/// Provides CoreAudio device enumeration and selection for audio input.
+/// Provides CoreAudio device enumeration and selection for audio input and output.
 ///
 /// Used by ``AudioRecorder`` to detect and fall back from broken input devices
 /// (e.g., Bluetooth headphones that report invalid formats).
@@ -49,6 +49,22 @@ public enum AudioDeviceManager {
         }
     }
 
+    /// Describes an available audio output device using its persistent Core Audio UID.
+    public struct OutputDevice: Sendable, Equatable, Identifiable, CustomStringConvertible {
+        public let id: AudioDeviceID
+        public let uid: String
+        public let name: String
+        public let transportType: UInt32
+
+        public var transportLabel: String {
+            InputDevice.label(for: transportType)
+        }
+
+        public var description: String {
+            "\(name) (uid=\(uid), id=\(id), transport=\(transportLabel))"
+        }
+    }
+
     // MARK: - Device Enumeration
 
     /// Returns all audio devices that have at least one input channel.
@@ -80,6 +96,25 @@ public enum AudioDeviceManager {
             let transport = transportType(id)
             return InputDevice(id: id, name: name, transportType: transport)
         }
+    }
+
+    /// Returns all audio devices that have at least one output channel and a stable UID.
+    public static func outputDevices() -> [OutputDevice] {
+        allDeviceIDs().compactMap { id in
+            guard hasChannels(id, scope: kAudioObjectPropertyScopeOutput),
+                  let uid = deviceUID(id) else { return nil }
+            return OutputDevice(
+                id: id,
+                uid: uid,
+                name: deviceName(id) ?? "Unknown Device",
+                transportType: transportType(id)
+            )
+        }
+    }
+
+    /// Resolves an output device by its persistent Core Audio UID.
+    public static func outputDevice(uid: String) -> OutputDevice? {
+        outputDevices().first { $0.uid == uid }
     }
 
     /// Returns the AudioDeviceID of the built-in microphone, if available.
@@ -134,6 +169,33 @@ public enum AudioDeviceManager {
         return true
     }
 
+    /// Sets a specific output device on an AVAudioEngine without changing the system default.
+    @discardableResult
+    public static func setOutputDevice(_ deviceID: AudioDeviceID, on engine: AVAudioEngine) -> Bool {
+        guard hasChannels(deviceID, scope: kAudioObjectPropertyScopeOutput) else {
+            logger.error("set_output_device failed: device_id=\(deviceID) has no output channels")
+            return false
+        }
+        guard let audioUnit = engine.outputNode.audioUnit else {
+            logger.error("set_output_device failed: no audio unit on output node")
+            return false
+        }
+        var mutableID = deviceID
+        let status = AudioUnitSetProperty(
+            audioUnit,
+            kAudioOutputUnitProperty_CurrentDevice,
+            kAudioUnitScope_Global,
+            0,
+            &mutableID,
+            UInt32(MemoryLayout<AudioDeviceID>.size)
+        )
+        if status != noErr {
+            logger.error("set_output_device failed: device_id=\(deviceID) OSStatus=\(status)")
+            return false
+        }
+        return true
+    }
+
     /// Returns the AudioDeviceID currently assigned to an engine's input node.
     public static func currentInputDevice(of engine: AVAudioEngine) -> AudioDeviceID? {
         guard let audioUnit = engine.inputNode.audioUnit else { return nil }
@@ -152,6 +214,20 @@ public enum AudioDeviceManager {
     }
 
     // MARK: - Device Info
+
+    /// Returns the stable Core Audio UID of a device.
+    public static func deviceUID(_ deviceID: AudioDeviceID) -> String? {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDeviceUID,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var uid: Unmanaged<CFString>?
+        var size = UInt32(MemoryLayout<Unmanaged<CFString>?>.size)
+        let status = AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &uid)
+        guard status == noErr, let validUID = uid else { return nil }
+        return validUID.takeRetainedValue() as String
+    }
 
     /// Returns the name of a device.
     public static func deviceName(_ deviceID: AudioDeviceID) -> String? {
@@ -192,11 +268,35 @@ public enum AudioDeviceManager {
 
     // MARK: - Private
 
+    private static func allDeviceIDs() -> [AudioDeviceID] {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioHardwarePropertyDevices,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        )
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size
+        ) == noErr, size > 0 else { return [] }
+        var ids = [AudioDeviceID](
+            repeating: 0,
+            count: Int(size) / MemoryLayout<AudioDeviceID>.size
+        )
+        guard AudioObjectGetPropertyData(
+            AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &ids
+        ) == noErr else { return [] }
+        return ids
+    }
+
     /// Checks whether a device has input channels (is a microphone/input device).
     private static func hasInputChannels(_ deviceID: AudioDeviceID) -> Bool {
+        hasChannels(deviceID, scope: kAudioObjectPropertyScopeInput)
+    }
+
+    private static func hasChannels(_ deviceID: AudioDeviceID, scope: AudioObjectPropertyScope) -> Bool {
         var address = AudioObjectPropertyAddress(
             mSelector: kAudioDevicePropertyStreamConfiguration,
-            mScope: kAudioObjectPropertyScopeInput,
+            mScope: scope,
             mElement: kAudioObjectPropertyElementMain
         )
         var size: UInt32 = 0

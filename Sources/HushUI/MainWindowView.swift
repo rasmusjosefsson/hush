@@ -4,6 +4,7 @@ import HushViewModels
 
 public enum SidebarItem: String, CaseIterable, Identifiable {
     case transcribe = "Transcribe"
+    case conversation = "Conversation"
     case library = "Library"
     case dictations = "Dictations"
     case vocabulary = "AI Processing"
@@ -14,6 +15,7 @@ public enum SidebarItem: String, CaseIterable, Identifiable {
     public var icon: String {
         switch self {
         case .transcribe: return "waveform"
+        case .conversation: return "message.fill"
         case .library: return "square.grid.2x2"
         case .dictations: return "clock.arrow.circlepath"
         case .vocabulary: return "wand.and.stars"
@@ -21,7 +23,7 @@ public enum SidebarItem: String, CaseIterable, Identifiable {
         }
     }
 
-    public static let primaryItems: [SidebarItem] = [.transcribe, .library, .dictations]
+    public static let primaryItems: [SidebarItem] = [.transcribe, .conversation, .library, .dictations]
     public static let configItems: [SidebarItem] = [.vocabulary, .settings]
 }
 
@@ -29,15 +31,17 @@ public struct MainWindowView: View {
     @Bindable var state: MainWindowState
 
     let transcriptionViewModel: TranscriptionViewModel
+    let conversationViewModel: ConversationViewModel
     let historyViewModel: DictationHistoryViewModel
     let settingsViewModel: SettingsViewModel
     let customWordsViewModel: CustomWordsViewModel
     let textSnippetsViewModel: TextSnippetsViewModel
     let libraryViewModel: TranscriptionLibraryViewModel
 
-    public init(state: MainWindowState, transcriptionViewModel: TranscriptionViewModel, historyViewModel: DictationHistoryViewModel, settingsViewModel: SettingsViewModel, customWordsViewModel: CustomWordsViewModel, textSnippetsViewModel: TextSnippetsViewModel, libraryViewModel: TranscriptionLibraryViewModel) {
+    public init(state: MainWindowState, transcriptionViewModel: TranscriptionViewModel, conversationViewModel: ConversationViewModel, historyViewModel: DictationHistoryViewModel, settingsViewModel: SettingsViewModel, customWordsViewModel: CustomWordsViewModel, textSnippetsViewModel: TextSnippetsViewModel, libraryViewModel: TranscriptionLibraryViewModel) {
         self.state = state
         self.transcriptionViewModel = transcriptionViewModel
+        self.conversationViewModel = conversationViewModel
         self.historyViewModel = historyViewModel
         self.settingsViewModel = settingsViewModel
         self.customWordsViewModel = customWordsViewModel
@@ -72,6 +76,8 @@ public struct MainWindowView: View {
                     switch state.selectedItem {
                     case .transcribe:
                         TranscribeView(viewModel: transcriptionViewModel, showingProgressDetail: $state.showingProgressDetail, onNavigateBack: { state.navigateBack() })
+                    case .conversation:
+                        ConversationView(viewModel: conversationViewModel)
                     case .library:
                         TranscriptionLibraryView(viewModel: libraryViewModel) { transcription in
                             transcriptionViewModel.currentTranscription = transcription
@@ -203,6 +209,7 @@ struct MainWindowView_Previews: PreviewProvider {
         MainWindowView(
             state: MainWindowState(),
             transcriptionViewModel: TranscriptionViewModel(),
+            conversationViewModel: ConversationViewModel(),
             historyViewModel: DictationHistoryViewModel(),
             settingsViewModel: SettingsViewModel(),
             customWordsViewModel: CustomWordsViewModel(),

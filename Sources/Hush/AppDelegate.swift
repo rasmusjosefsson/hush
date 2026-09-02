@@ -24,6 +24,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // MARK: - ViewModels
 
     private let transcriptionViewModel = TranscriptionViewModel()
+    private let conversationViewModel = ConversationViewModel()
     private let historyViewModel = DictationHistoryViewModel()
     private let settingsViewModel = SettingsViewModel()
     private let customWordsViewModel = CustomWordsViewModel()
@@ -74,8 +75,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         if let showIdlePillObserver { NotificationCenter.default.removeObserver(showIdlePillObserver) }
         if let overlayPositionObserver { NotificationCenter.default.removeObserver(overlayPositionObserver) }
         let sttClient = appEnvironment?.sttDispatcher
+        let conversationService = appEnvironment?.conversationService
         let semaphore = DispatchSemaphore(value: 0)
         Task.detached {
+            await conversationService?.shutdown()
             await sttClient?.shutdown()
             semaphore.signal()
         }
@@ -244,7 +247,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 onMenuBarIconUpdate: { [weak self] state in self?.updateMenuBarIcon(state: state) },
                 onHistoryReload: { [weak self] in self?.historyViewModel.loadDictations() }
             )
+            coordinator.canStartDictation = { [weak self] in
+                self?.conversationViewModel.isRunning != true
+            }
             dictationFlowCoordinator = coordinator
+            conversationViewModel.configure(
+                service: env.conversationService,
+                canStart: { [weak self] in
+                    self?.dictationFlowCoordinator?.isDictationInProgress != true
+                }
+            )
 
             maybeShowOnboarding()
         } catch {
@@ -267,7 +279,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let manager = HotkeyManager(trigger: HotkeyTrigger.current)
 
         manager.onStartRecording = { [weak self] mode in
-            self?.dictationFlowCoordinator?.startDictation(mode: mode, trigger: .hotkey)
+            guard let self else { return }
+            guard !conversationViewModel.isRunning else {
+                hotkeyManager?.resetToIdle()
+                return
+            }
+            dictationFlowCoordinator?.startDictation(mode: mode, trigger: .hotkey)
         }
         manager.onStopRecording = { [weak self] in
             self?.dictationFlowCoordinator?.stopDictation()
@@ -543,6 +560,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let contentView = MainWindowView(
             state: mainWindowState,
             transcriptionViewModel: transcriptionViewModel,
+            conversationViewModel: conversationViewModel,
             historyViewModel: historyViewModel,
             settingsViewModel: settingsViewModel,
             customWordsViewModel: customWordsViewModel,

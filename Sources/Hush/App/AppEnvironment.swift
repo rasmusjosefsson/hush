@@ -21,6 +21,7 @@ final class AppEnvironment {
     let permissionService: PermissionService
     let accessibilityService: AccessibilityService
     let launchAtLoginService: LaunchAtLoginService
+    let conversationService: ConversationService?
 
     init() throws {
         try AppPaths.ensureDirectories()
@@ -115,5 +116,19 @@ final class AppEnvironment {
             processingMode: processingModeClosure,
             diarizationService: diarizationService
         )
+
+        if let workerURL = Bundle.module.url(
+            forResource: "chatterbox_worker",
+            withExtension: "py"
+        ) {
+            conversationService = ConversationService(
+                transcriber: SystemConversationTranscriber(stt: sttDispatcher),
+                replyGenerator: OllamaReplyGenerator(),
+                synthesizer: ChatterboxProcess(workerURL: workerURL),
+                player: LocalSpeechPlayer()
+            )
+        } else {
+            conversationService = nil
+        }
     }
 }
