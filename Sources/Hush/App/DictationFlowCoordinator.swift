@@ -9,8 +9,10 @@ final class DictationFlowCoordinator {
     // MARK: - Public Interface
 
     var isDictationActive: Bool { overlayController != nil }
+    var isDictationInProgress: Bool { stateMachine.state != .idle }
     var isIdlePillVisible: Bool { idlePillController != nil }
     var hotkeyManager: HotkeyManager?
+    var canStartDictation: () -> Bool = { true }
 
     // MARK: - Dependencies
 
@@ -88,6 +90,7 @@ final class DictationFlowCoordinator {
         mode: FnKeyStateMachine.RecordingMode,
         trigger: DictationTrigger = .hotkey
     ) {
+        guard canStartDictation() else { return }
         sendEvent(.startRequested(mode: mode))
     }
 

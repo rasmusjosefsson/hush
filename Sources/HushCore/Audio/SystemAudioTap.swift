@@ -15,6 +15,7 @@ public final class SystemAudioTap: @unchecked Sendable {
     }
 
     private let logger = Logger(subsystem: "com.hush.core", category: "SystemAudioTap")
+    private let excludedProcessObjectIDs: [AudioObjectID]
     private let queue = DispatchQueue(label: "com.hush.systemaudiotap", qos: .userInitiated)
     private let watchdogQueue = DispatchQueue(label: "com.hush.systemaudiotap.watchdog", qos: .utility)
 
@@ -31,7 +32,9 @@ public final class SystemAudioTap: @unchecked Sendable {
     private var state: LifecycleState = .idle
     private var bufferHandler: AudioBufferHandler?
 
-    public init() {}
+    public init(excludingProcessObjectIDs: [AudioObjectID] = []) {
+        self.excludedProcessObjectIDs = excludingProcessObjectIDs
+    }
 
     deinit {
         stop()
@@ -112,7 +115,9 @@ public final class SystemAudioTap: @unchecked Sendable {
     }
 
     private func createProcessTap() throws {
-        let tapDescription = CATapDescription(stereoGlobalTapButExcludeProcesses: [])
+        let tapDescription = CATapDescription(
+            stereoGlobalTapButExcludeProcesses: excludedProcessObjectIDs
+        )
         let tapUUID = UUID()
         tapDescription.uuid = tapUUID
         tapDescription.muteBehavior = .unmuted

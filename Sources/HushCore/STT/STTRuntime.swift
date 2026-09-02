@@ -79,10 +79,17 @@ public actor STTRuntime: STTRuntimeProtocol {
 
         do {
             try Task.checkCancellation()
-            let result = try await {
-                var decoderState = TdtDecoderState.make()
+            let paddedSamples = ParakeetDictationAudioPadding.samplesIfEligible(
+                audioPath: audioPath,
+                job: job
+            )
+            var decoderState = TdtDecoderState.make()
+            let result = try await NeuralEngineInferenceGate.shared.withExclusiveAccess {
+                if let paddedSamples {
+                    return try await manager.transcribe(paddedSamples, decoderState: &decoderState)
+                }
                 return try await manager.transcribe(audioURL, decoderState: &decoderState)
-            }()
+            }
             let words = Self.mergeTokenTimingsIntoWords(result.tokenTimings)
             onProgress?(100, 100)
             return STTResult(text: result.text, words: words)
@@ -307,8 +314,9 @@ public actor STTRuntime: STTRuntimeProtocol {
             do {
                 // FluidAudio progress is manager-scoped, so each slot keeps its
                 // own manager while the read-only model bundle stays shared.
-                let loadedInteractiveManager = AsrManager(config: .default)
-                let loadedBackgroundManager = AsrManager(config: .default)
+                let managerConfig = ParakeetRuntimeConfiguration.managerConfigForCurrentOS
+                let loadedInteractiveManager = AsrManager(config: managerConfig)
+                let loadedBackgroundManager = AsrManager(config: managerConfig)
                 interactiveManager = loadedInteractiveManager
                 backgroundManager = loadedBackgroundManager
                 try await loadedInteractiveManager.loadModels(downloadedModels)

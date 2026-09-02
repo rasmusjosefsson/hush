@@ -14,7 +14,7 @@ set -euo pipefail
 # Environment variables:
 #   APP_NAME            (default: Hush)
 #   BUNDLE_ID           (default: com.hush.Hush)
-#   VERSION             (default: 0.1.0)
+#   VERSION             (default: 0.2.0)
 #   BUILD_NUMBER        (default: UTC timestamp, e.g. 20260213220512)
 #   BUILD_GIT_COMMIT    (default: current git short SHA)
 #   BUILD_DATE_UTC      (default: current UTC ISO-8601 timestamp)
@@ -33,7 +33,7 @@ DIST_DIR="$ROOT_DIR/dist"
 
 APP_NAME="${APP_NAME:-Hush}"
 BUNDLE_ID="${BUNDLE_ID:-com.hush.Hush}"
-VERSION="${VERSION:-0.1.0}"
+VERSION="${VERSION:-0.2.0}"
 BUILD_NUMBER="${BUILD_NUMBER:-$(date -u +%Y%m%d%H%M%S)}"
 BUILD_GIT_COMMIT="${BUILD_GIT_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD 2>/dev/null || echo unknown)}"
 BUILD_DATE_UTC="${BUILD_DATE_UTC:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
