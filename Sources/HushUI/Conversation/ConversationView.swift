@@ -121,11 +121,6 @@ public struct ConversationView: View {
         }
         .padding(DesignSystem.Spacing.lg)
         .navigationTitle("Conversation")
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Color.clear.frame(width: 0, height: 0)
-            }
-        }
         .fileImporter(
             isPresented: $choosingReference,
             allowedContentTypes: [.wav],

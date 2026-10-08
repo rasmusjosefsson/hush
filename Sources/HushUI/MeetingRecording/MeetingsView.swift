@@ -136,36 +136,17 @@ struct MeetingsView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: DesignSystem.Spacing.lg) {
-            Spacer()
-
-            Image(systemName: viewModel.searchText.isEmpty ? "waveform.badge.mic" : "magnifyingglass")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(DesignSystem.Colors.textTertiary)
-
-            Text(viewModel.searchText.isEmpty
-                 ? "No meetings recorded yet"
-                 : "No matching meetings")
-                .font(DesignSystem.Typography.body)
-                .foregroundStyle(DesignSystem.Colors.textSecondary)
-
-            Text(viewModel.searchText.isEmpty
-                 ? "Press Record Meeting to capture system audio and transcribe locally."
-                 : "Try different words or clear your search.")
-                .font(DesignSystem.Typography.bodySmall)
-                .foregroundStyle(DesignSystem.Colors.textTertiary)
-                .multilineTextAlignment(.center)
-
+        Group {
             if viewModel.searchText.isEmpty {
-                Text("For the cleanest separation between you and other participants, use headphones.")
-                    .font(DesignSystem.Typography.bodySmall)
-                    .foregroundStyle(DesignSystem.Colors.textTertiary)
-                    .multilineTextAlignment(.center)
+                ContentUnavailableView {
+                    Label("No Meetings", systemImage: "waveform.badge.mic")
+                } description: {
+                    Text("Press Record Meeting to capture system audio and transcribe locally. Use headphones for the cleanest separation between you and other participants.")
+                }
+            } else {
+                ContentUnavailableView.search(text: viewModel.searchText)
             }
-
-            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, DesignSystem.Spacing.xl)
     }
 }

@@ -490,7 +490,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func openMainWindowToSettings() {
-        mainWindowState.selectedItem = .settings
+        mainWindowState.selectedItem = .general
         openMainWindow()
     }
 
@@ -574,10 +574,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 width: DesignSystem.Layout.sidebarMinWidth + DesignSystem.Layout.contentMinWidth,
                 height: DesignSystem.Layout.windowMinHeight
             ),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
+        window.contentViewController = NSHostingController(rootView: contentView)
         window.title = mainWindowState.selectedItem.rawValue
         window.center()
         window.setFrameAutosaveName("MainWindow2")
@@ -585,9 +586,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             width: DesignSystem.Layout.sidebarMinWidth + DesignSystem.Layout.contentMinWidth,
             height: DesignSystem.Layout.windowMinHeight
         )
+        // System Settings-style chrome: sidebar runs under the traffic lights, title sits in the
+        // toolbar, and scrolled content blurs beneath it (titlebar must stay non-transparent)
         window.titlebarAppearsTransparent = false
         window.titleVisibility = .visible
-        window.contentView = NSHostingView(rootView: contentView)
+        window.toolbar = NSToolbar(identifier: "MainWindowToolbar")
+        window.toolbarStyle = .unified
         window.delegate = self
         window.isReleasedWhenClosed = false
 

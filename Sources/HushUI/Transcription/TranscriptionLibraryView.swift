@@ -117,28 +117,16 @@ struct TranscriptionLibraryView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: DesignSystem.Spacing.lg) {
-            Spacer()
-
-            Image(systemName: viewModel.searchText.isEmpty ? "doc.text" : "magnifyingglass")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(DesignSystem.Colors.accent)
-                .opacity(0.5)
-
-            VStack(spacing: DesignSystem.Spacing.sm) {
-                Text(viewModel.searchText.isEmpty
-                     ? "No transcriptions yet"
-                     : "No matching transcriptions")
-                    .font(DesignSystem.Typography.pageTitle)
-                    .foregroundStyle(.primary)
-                Text(viewModel.searchText.isEmpty
-                     ? "Transcribe a file to get started."
-                     : "Try different words or clear your search.")
-                    .font(DesignSystem.Typography.bodySmall)
-                    .foregroundStyle(.secondary)
+        Group {
+            if viewModel.searchText.isEmpty {
+                ContentUnavailableView {
+                    Label("No Transcriptions", systemImage: "doc.text")
+                } description: {
+                    Text("Transcribe a file to get started.")
+                }
+            } else {
+                ContentUnavailableView.search(text: viewModel.searchText)
             }
-
-            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

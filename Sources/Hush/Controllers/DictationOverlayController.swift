@@ -230,14 +230,27 @@ final class DictationOverlayController {
         }
 
         let panelWidth = bounds.width
-        let pillWidth: CGFloat = 210 // approximate pill content width
-        let pillLeft = (panelWidth - pillWidth) / 2
-        let pillRight = pillLeft + pillWidth
-
         let x = point.x
-        if x >= pillLeft && x < pillLeft + 45 {
+        let isCancelZone: Bool
+        let isStopZone: Bool
+        let gap = overlayViewModel.notchGapWidth
+        if gap > 0 {
+            // Notch mode: cancel sits in the left ear, stop in the right ear.
+            let gapLeft = (panelWidth - gap) / 2
+            let gapRight = gapLeft + gap
+            isCancelZone = x >= gapLeft - 100 && x < gapLeft - 50
+            isStopZone = x > gapRight + 50 && x <= gapRight + 100
+        } else {
+            let pillWidth: CGFloat = 158 // approximate pill content width
+            let pillLeft = (panelWidth - pillWidth) / 2
+            let pillRight = pillLeft + pillWidth
+            isCancelZone = x >= pillLeft && x < pillLeft + 36
+            isStopZone = x > pillRight - 36 && x <= pillRight
+        }
+
+        if isCancelZone {
             overlayViewModel.hoverTooltip = "Cancel (Esc)"
-        } else if x > pillRight - 45 && x <= pillRight {
+        } else if isStopZone {
             if overlayViewModel.sessionKind == .command {
                 overlayViewModel.hoverTooltip = "Stop & apply (Fn+Control)"
             } else {

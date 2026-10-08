@@ -3,7 +3,7 @@ import HushCore
 import HushViewModels
 
 /// Persistent floating pill shown when idle — always visible when not dictating.
-/// Expands on hover to show "Click or hold <trigger key> to start dictating" tooltip.
+/// Expands on hover to show a "Click or hold <trigger key> to dictate" hint.
 public struct IdlePillView: View {
     @Bindable var viewModel: IdlePillViewModel
 
@@ -24,141 +24,66 @@ public struct IdlePillView: View {
         }
     }
 
-    // MARK: - Bottom Position (original design)
+    // MARK: - Bottom Position
 
+    /// Collapsed: a quiet sliver (like the home indicator). Hover: morphs into a capsule with the hint.
     private var bottomBody: some View {
-        VStack(spacing: 6) {
-            tooltip
-                .opacity(viewModel.isHovered ? 1 : 0)
-                .scaleEffect(viewModel.isHovered ? 1 : 0.9)
-                .animation(.easeOut(duration: 0.2), value: viewModel.isHovered)
-
-            bottomPill
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.isHovered)
-        }
-        .padding(.bottom, 8)
-        .frame(
-            maxWidth: .infinity,
-            maxHeight: .infinity,
-            alignment: .bottom
-        )
-    }
-
-    // MARK: - Notch Grow-Down Position
-
-    private var notchBody: some View {
-        VStack(spacing: 0) {
-            // Invisible spacer matching notch height — pushes content below camera housing
-            Color.clear.frame(height: viewModel.notchHeight + 2)
-
-            // Collapsed: just a row of dots; Expanded: dots + tooltip
-            VStack(spacing: viewModel.isHovered ? 8 : 0) {
-                dotsRow
-                    .padding(.top, 4)
-
-                if viewModel.isHovered {
-                    notchTooltipContent
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                        .padding(.bottom, 4)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.bottom, viewModel.isHovered ? 6 : 4)
-        }
-        .background(
-            UnevenRoundedRectangle(
-                topLeadingRadius: 0,
-                bottomLeadingRadius: 14,
-                bottomTrailingRadius: 14,
-                topTrailingRadius: 0
-            )
-            .fill(.black)
-            .shadow(color: .black.opacity(0.25), radius: 4, y: 2)
-        )
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.isHovered)
-        // Constrain width: slightly wider than notch for the grow-down bump
-        .frame(width: viewModel.isHovered ? viewModel.notchGapWidth + 80 : viewModel.notchGapWidth + 20)
-        .frame(
-            maxWidth: .infinity,
-            maxHeight: .infinity,
-            alignment: .top
-        )
-    }
-
-    /// Tooltip text content for notch mode (no separate background — part of the grow-down)
-    private var notchTooltipContent: some View {
-        HStack(spacing: 0) {
-            Text("Click or hold ")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.8))
-            Text(HotkeyTrigger.current.shortSymbol)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color(nsColor: NSColor(red: 0.85, green: 0.55, blue: 0.75, alpha: 1.0)))
-            Text(" to dictate")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.8))
-        }
-    }
-
-    // MARK: - Bottom Pill
-
-    private var bottomPill: some View {
         ZStack {
-            Capsule()
-                .fill(viewModel.isHovered ? DesignSystem.Colors.pillBackground : Color(white: 0.25, opacity: 0.9))
-                .overlay(
-                    Capsule()
-                        .strokeBorder(DesignSystem.Colors.pillBorder.opacity(viewModel.isHovered ? 0.67 : 0.4), lineWidth: 0.5)
-                )
-        }
-        .frame(
-            width: viewModel.isHovered ? 148 : 48,
-            height: viewModel.isHovered ? 30 : 10
-        )
-        .shadow(color: .black.opacity(0.3), radius: viewModel.isHovered ? 8 : 4, y: 4)
-        .overlay {
             if viewModel.isHovered {
-                dotsRow
-                    .transition(.opacity)
+                hint
+                    .transition(.opacity.animation(.easeOut(duration: 0.15).delay(0.06)))
             }
         }
-    }
-
-    private var dotsRow: some View {
-        HStack(spacing: 4) {
-            ForEach(0..<12, id: \.self) { _ in
-                Circle()
-                    .fill(Color.white.opacity(0.25))
-                    .frame(width: 3, height: 3)
-            }
-        }
-    }
-
-    // MARK: - Tooltip (bottom position)
-
-    private var tooltip: some View {
-        HStack(spacing: 0) {
-            Text("Click or hold ")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(0.9))
-            Text(HotkeyTrigger.current.shortSymbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Color(nsColor: NSColor(red: 0.85, green: 0.55, blue: 0.75, alpha: 1.0)))
-            Text(" to start dictating")
-                .font(.system(size: 14, weight: .medium))
-                .foregroundStyle(.white.opacity(0.9))
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
+        .padding(.horizontal, viewModel.isHovered ? 14 : 0)
+        .frame(width: viewModel.isHovered ? nil : 44, height: viewModel.isHovered ? 30 : 6)
         .background(
             Capsule()
-                .fill(DesignSystem.Colors.pillBackground)
-                .overlay(
-                    Capsule()
-                        .strokeBorder(DesignSystem.Colors.pillBorder.opacity(0.67), lineWidth: 0.5)
-                )
-                .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+                .fill(viewModel.isHovered ? DesignSystem.Colors.pillBackground : Color(white: 0.22, opacity: 0.85))
+                .overlay(Capsule().strokeBorder(DesignSystem.Colors.pillBorder, lineWidth: 0.5))
+                .shadow(color: .black.opacity(viewModel.isHovered ? 0.28 : 0.15), radius: viewModel.isHovered ? 10 : 3, y: viewModel.isHovered ? 4 : 1)
         )
+        .animation(DesignSystem.Animation.overlayMorph, value: viewModel.isHovered)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+    }
+
+    // MARK: - Notch Position
+
+    /// Invisible while idle: an opaque black shape inset inside the hardware notch, so it
+    /// is never seen but still makes the window server route hover/clicks to this panel
+    /// (fully transparent pixels pass mouse events through). On hover the notch grows
+    /// outward and down to reveal the hint below the camera.
+    private var notchBody: some View {
+        let expanded = viewModel.isHovered
+        return VStack(spacing: 0) {
+            Color.clear.frame(height: expanded ? viewModel.notchHeight : max(viewModel.notchHeight - 4, 0))
+            if expanded {
+                hint
+                    .padding(.top, 2)
+                    .padding(.bottom, 10)
+                    .transition(.opacity.animation(.easeOut(duration: 0.15).delay(0.08)))
+            }
+        }
+        .frame(width: max(viewModel.notchGapWidth + (expanded ? 112 : -10), 0))
+        .background(
+            NotchShape(topRadius: expanded ? 6 : 0, bottomRadius: expanded ? 18 : 8)
+                .fill(.black)
+        )
+        .animation(DesignSystem.Animation.overlayMorph, value: expanded)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    // MARK: - Hint
+
+    private var hint: some View {
+        HStack(spacing: 5) {
+            Text("Click or hold")
+            OverlayKeycap(HotkeyTrigger.current.shortSymbol)
+            Text("to dictate")
+        }
+        .font(DesignSystem.Typography.overlayLabel)
+        .foregroundStyle(DesignSystem.Colors.overlaySecondary)
+        .fixedSize()
     }
 }
 
@@ -175,9 +100,18 @@ struct IdlePillView_Previews: PreviewProvider {
                 vm.isHovered = true
                 return vm
             }())
+
+            IdlePillView(viewModel: {
+                let vm = IdlePillViewModel()
+                vm.isTopPosition = true
+                vm.notchGapWidth = 185
+                vm.notchHeight = 32
+                vm.isHovered = true
+                return vm
+            }())
         }
         .padding(30)
-        .frame(width: 400, height: 200)
+        .frame(width: 400, height: 320)
         .background(Color.gray.opacity(0.3))
     }
 }

@@ -1,26 +1,21 @@
 import SwiftUI
 
 /// Centralized design tokens for consistent styling across the app.
-/// "Warm Magical" design system — coral-orange accent, generous spacing, rounded headlines.
+/// Native-feeling macOS design system — user-selectable accent, system typography, generous spacing.
 public enum DesignSystem {
     // MARK: - Colors
 
     public enum Colors {
-        // Accent — warm peach primary
-        public static let accent = Color(light: .init(red: 0.91, green: 0.42, blue: 0.23),
-                                  dark: .init(red: 1.0, green: 0.878, blue: 0.761))
-        public static let accentLight = Color(light: .init(red: 1.0, green: 0.94, blue: 0.92),
-                                       dark: .init(red: 0.224, green: 0.188, blue: 0.157))
-        public static let accentDark = Color(light: .init(red: 0.77, green: 0.33, blue: 0.16),
-                                       dark: .init(red: 0.90, green: 0.75, blue: 0.58))
+        // Accent — user-configurable (Settings > Appearance), defaults to Hush coral
+        public static var accent: Color { AccentChoice.current.color }
+        public static var accentLight: Color { accent.opacity(0.14) }
+        public static var accentDark: Color { AccentChoice.current.pressedColor }
 
-        // Backgrounds
-        public static let background = Color(light: .init(red: 0.98, green: 0.98, blue: 0.97),
-                                      dark: .init(red: 0.067, green: 0.067, blue: 0.067))
-        public static let surface = Color(light: .white,
-                                   dark: .init(red: 0.098, green: 0.098, blue: 0.098))
-        public static let surfaceElevated = Color(light: .init(red: 0.96, green: 0.96, blue: 0.94),
-                                           dark: .init(red: 0.133, green: 0.133, blue: 0.133))
+        // Backgrounds — native window background; cards are a light lift over it (like grouped Form rows)
+        public static let background = Color(nsColor: .windowBackgroundColor)
+        public static let surface = Color(light: .white, dark: .white.opacity(0.035))
+        public static let surfaceElevated = Color(light: .init(red: 0.96, green: 0.96, blue: 0.95),
+                                                  dark: .white.opacity(0.08))
 
         // Text
         public static let textPrimary = Color(light: .init(red: 0.10, green: 0.10, blue: 0.10),
@@ -37,24 +32,20 @@ public enum DesignSystem {
                                         dark: .init(red: 0.98, green: 0.75, blue: 0.14))
         public static let errorRed = Color(light: .init(red: 0.90, green: 0.30, blue: 0.26),
                                     dark: .init(red: 0.898, green: 0.302, blue: 0.180))
-        public static let onAccent = Color(light: .white,
-                                         dark: .init(red: 0.13, green: 0.10, blue: 0.07))
+        public static let onAccent = Color.white
 
         // Borders & dividers
-        public static let border = Color(light: .init(red: 0.91, green: 0.91, blue: 0.88),
-                                  dark: .init(red: 0.125, green: 0.118, blue: 0.094))
-        public static let divider = Color(light: .init(red: 0.94, green: 0.94, blue: 0.91),
-                                   dark: .init(red: 0.153, green: 0.153, blue: 0.165))
+        public static let border = Color(light: .black.opacity(0.08), dark: .white.opacity(0.07))
+        public static let divider = Color(nsColor: .separatorColor)
 
         // Interactive
         public static let rowHoverBackground = Color(light: .init(red: 0.96, green: 0.96, blue: 0.94),
                                               dark: .primary.opacity(0.06))
-        public static let cardBackground = Color(light: .white,
-                                          dark: .init(red: 0.098, green: 0.098, blue: 0.098))
+        public static let cardBackground = surface
 
         // Playback
         public static let playbackTrack = Color.primary.opacity(0.08)
-        public static let playbackFill = Color.accentColor
+        public static var playbackFill: Color { accent }
 
         // Meeting pill
         public static let meetingPillBackground = Color(light: .black.opacity(0.88), dark: .black.opacity(0.90))
@@ -87,10 +78,17 @@ public enum DesignSystem {
         // YouTube badge
         public static let youtubeRed = Color.red
 
-        // Legacy aliases — pill/overlay (UNTOUCHED, these stay as-is for the pill)
-        public static let pillBackground = Color.black.opacity(0.9)
-        public static let pillBorder = Color.white.opacity(0.15)
-        public static let recordingRed = Color.red
+        // Floating overlay (notch + bottom pill) — always dark, like the hardware notch
+        public static let pillBackground = Color.black.opacity(0.92)
+        public static let pillBorder = Color.white.opacity(0.12)
+        public static let recordingRed = Color(nsColor: .systemRed)
+        public static let overlayPrimary = Color.white.opacity(0.92)
+        public static let overlaySecondary = Color.white.opacity(0.6)
+        public static let overlayTertiary = Color.white.opacity(0.38)
+        public static let overlayFill = Color.white.opacity(0.14)
+        public static let overlayFillHover = Color.white.opacity(0.24)
+        /// Accent tuned for legibility on the black overlay.
+        public static var overlayAccent: Color { AccentChoice.current.overlayColor }
 
         // Sidebar
         public static let contentBackground = Color(nsColor: .textBackgroundColor)
@@ -111,9 +109,9 @@ public enum DesignSystem {
     // MARK: - Typography
 
     public enum Typography {
-        // Headlines — .rounded design = instantly warmer
-        public static let heroTitle = Font.system(size: 28, weight: .bold, design: .rounded)
-        public static let pageTitle = Font.system(size: 22, weight: .semibold, design: .rounded)
+        // Headlines — SF Pro, matching system apps
+        public static let heroTitle = Font.system(size: 28, weight: .bold)
+        public static let pageTitle = Font.system(size: 22, weight: .bold)
         public static let sectionTitle = Font.system(size: 17, weight: .semibold)
 
         // Body — larger minimums
@@ -135,10 +133,16 @@ public enum DesignSystem {
         public static let duration = Font.system(size: 11).monospacedDigit()
 
         // Legacy aliases (kept for existing references)
-        public static let headline = Font.system(size: 17, weight: .semibold, design: .rounded)
-        public static let title = Font.system(size: 22, weight: .semibold, design: .rounded)
-        public static let largeTitle = Font.system(size: 28, weight: .bold, design: .rounded)
+        public static let headline = sectionTitle
+        public static let title = pageTitle
+        public static let largeTitle = heroTitle
         public static let sectionHeader = Font.system(size: 13, weight: .semibold)
+
+        // Overlay (notch / pill)
+        public static let overlayLabel = Font.system(size: 12, weight: .medium)
+        public static let overlayTimer = Font.system(size: 12, weight: .medium).monospacedDigit()
+        public static let overlayTitle = Font.system(size: 13, weight: .semibold)
+        public static let overlayCaption = Font.system(size: 11)
     }
 
     // MARK: - Layout
@@ -166,6 +170,9 @@ public enum DesignSystem {
 
     public enum Animation {
         public static let selectionChange: SwiftUI.Animation = .easeInOut(duration: 0.15)
+        /// Morph between notch / pill states — matches the Dynamic Island feel.
+        public static let overlayMorph: SwiftUI.Animation = .spring(response: 0.38, dampingFraction: 0.82)
+        public static let overlayContent: SwiftUI.Animation = .easeInOut(duration: 0.18)
         public static let hoverTransition: SwiftUI.Animation = .easeInOut(duration: 0.12)
         public static let contentSwap: SwiftUI.Animation = .easeInOut(duration: 0.2)
         public static let portalLift: SwiftUI.Animation = .spring(response: 0.3, dampingFraction: 0.7)

@@ -286,5 +286,19 @@ cat >"$INFO_PLIST" <<EOF
 </plist>
 EOF
 
+# The linker records the deployment target as the SDK version (sdk 14.0), which makes
+# macOS run Hush in compatibility mode without the current system design (e.g. the
+# floating sidebar). Stamp the real SDK version, then sign the finished bundle
+# (Developer ID signing in sign_notarize.sh replaces this).
+SDK_VERSION="$(xcrun --sdk macosx --show-sdk-version)"
+MIN_VERSION="$(vtool -show-build "$MACOS_DIR/$APP_NAME" | awk '/minos/ {print $2; exit}')"
+vtool -set-build-version macos "$MIN_VERSION" "$SDK_VERSION" -replace -output "$MACOS_DIR/$APP_NAME" "$MACOS_DIR/$APP_NAME"
+
+# Prefer a stable local identity (Apple Development) so TCC grants such as Accessibility
+# survive rebuilds; ad-hoc signatures change every build. Override with LOCAL_SIGN_IDENTITY.
+LOCAL_SIGN_IDENTITY="${LOCAL_SIGN_IDENTITY:-$(security find-identity -v -p codesigning 2>/dev/null | awk -F'"' '/Apple Development/ {print $2; exit}')}"
+codesign --force --sign "${LOCAL_SIGN_IDENTITY:--}" "$APP_DIR" >/dev/null
+echo "Signed with: ${LOCAL_SIGN_IDENTITY:-ad-hoc}"
+
 echo "[4/4] Done: $APP_DIR"
 echo "Metadata: version=$VERSION build=$BUILD_NUMBER commit=$BUILD_GIT_COMMIT built=$BUILD_DATE_UTC source=$BUILD_SOURCE"

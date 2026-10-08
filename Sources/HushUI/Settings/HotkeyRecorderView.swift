@@ -2,9 +2,9 @@ import SwiftUI
 import HushCore
 
 /// "Record a shortcut" UI for hotkey selection.
-/// Normal state:    [ fn Fn              Change... ]
-/// Recording state: [ Press any key...   Cancel    ]  (highlighted border)
-/// With warning:    [ Space              Change... ]
+/// Normal state:    [ fn  Fn         ]  (click to record)
+/// Recording state: [ Type shortcut… ⓧ ]  (accent border)
+/// With warning:    [ Space          ]
 ///                    Warning text shown below.
 public struct HotkeyRecorderView: View {
     @Binding var trigger: HotkeyTrigger
@@ -47,45 +47,54 @@ public struct HotkeyRecorderView: View {
     // MARK: - Normal State
 
     private var normalView: some View {
-        HStack(spacing: 8) {
-            Text("\(trigger.shortSymbol) \(trigger.displayName)")
-                .font(DesignSystem.Typography.body)
-                .foregroundStyle(.primary)
-
-            Button("Change...") {
-                startRecording()
+        Button {
+            startRecording()
+        } label: {
+            shortcutField {
+                Text("\(trigger.shortSymbol)  \(trigger.displayName)")
+                    .foregroundStyle(.primary)
             }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
         }
+        .buttonStyle(.plain)
+        .help("Click to record a new shortcut")
     }
 
     // MARK: - Recording State
 
     private var recordingView: some View {
-        HStack(spacing: 8) {
-            if pendingModifiers.isEmpty {
-                Text("Press any key...")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(pendingModifierSymbols + "...")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(.primary)
+        shortcutField(isActive: true) {
+            HStack(spacing: 6) {
+                Text(pendingModifiers.isEmpty ? "Type shortcut…" : pendingModifierSymbols + "…")
+                    .foregroundStyle(pendingModifiers.isEmpty ? .secondary : .primary)
+                Spacer(minLength: 0)
+                Button {
+                    stopRecording()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .help("Cancel (Esc)")
             }
-
-            Button("Cancel") {
-                stopRecording()
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(DesignSystem.Colors.accent.opacity(0.5), lineWidth: 1.5)
-        )
+    }
+
+    /// Rounded field in the style of System Settings > Keyboard Shortcuts.
+    private func shortcutField(isActive: Bool = false, @ViewBuilder content: () -> some View) -> some View {
+        content()
+            .font(DesignSystem.Typography.bodySmall)
+            .padding(.horizontal, 10)
+            .frame(minWidth: 130, minHeight: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .strokeBorder(isActive ? DesignSystem.Colors.accent : Color(nsColor: .separatorColor),
+                                  lineWidth: isActive ? 2 : 0.5)
+            )
+            .contentShape(Rectangle())
     }
 
     /// Symbols for currently held modifiers in standard macOS order (⌃⌥⇧⌘).
