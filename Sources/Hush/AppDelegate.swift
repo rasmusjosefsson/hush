@@ -1,5 +1,6 @@
 import AppKit
 import HushCore
+import HushObjCShims
 import HushUI
 import HushViewModels
 import SwiftUI
@@ -49,6 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         FileLogger.shared.log("App launched", level: .info, category: .app)
+        // Lock the navigation sidebar at its fixed width — the split-view
+        // divider can otherwise be dragged despite the column constraints.
+        HushPinSplitViewDivider()
         setupMainMenu()
         setupMenuBar()
         setupEnvironment()
@@ -595,7 +599,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.delegate = self
         window.isReleasedWhenClosed = false
 
-
         mainWindow = window
     }
 
@@ -660,3 +663,5 @@ extension AppDelegate: NSMenuDelegate {
         rebuildRecentDictationsSubmenu(with: dictations)
     }
 }
+
+

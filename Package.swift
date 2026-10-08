@@ -31,6 +31,7 @@ let package = Package(
             name: "Hush",
             dependencies: [
                 "HushCore",
+                "HushObjCShims",
                 "HushViewModels",
                 "HushUI",
             ],

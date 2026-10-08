@@ -147,8 +147,8 @@ struct SidebarRow: View {
                 IconTile(item: item)
             }
             .foregroundStyle(isSelected && activeState != .inactive ? Color.white : Color.primary)
-            .padding(.leading, 6)
-            .padding(.trailing, 8)
+            .padding(.leading, 4)
+            .padding(.trailing, 6)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
@@ -181,7 +181,7 @@ public struct MainWindowView: View {
     @State private var sidebarSearch = ""
 
     /// Fixed sidebar width; fits the longest label ("Privacy & Security") with icon and padding.
-    private static let sidebarWidth: CGFloat = 220
+    private static let sidebarWidth: CGFloat = DesignSystem.Layout.sidebarWidth
 
     public init(state: MainWindowState, transcriptionViewModel: TranscriptionViewModel, conversationViewModel: ConversationViewModel, historyViewModel: DictationHistoryViewModel, settingsViewModel: SettingsViewModel, customWordsViewModel: CustomWordsViewModel, textSnippetsViewModel: TextSnippetsViewModel, libraryViewModel: TranscriptionLibraryViewModel) {
         self.state = state

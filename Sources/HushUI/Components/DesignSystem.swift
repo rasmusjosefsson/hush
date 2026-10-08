@@ -148,6 +148,8 @@ public enum DesignSystem {
     // MARK: - Layout
 
     public enum Layout {
+        /// Fixed sidebar width, pinned at the NSSplitView level — never resizable.
+        public static let sidebarWidth: CGFloat = 220
         public static let sidebarMinWidth: CGFloat = 260
         public static let contentMinWidth: CGFloat = 500
         public static let windowMinHeight: CGFloat = 560
