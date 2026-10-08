@@ -599,6 +599,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.delegate = self
         window.isReleasedWhenClosed = false
 
+        // Pin the sidebar column at its fixed width using the supported API —
+        // the split view's delegate is an NSSplitViewController; setting it
+        // crashes, but reading it is fine.
+        DispatchQueue.main.async { [weak window] in
+            Self.pinSidebarItem(in: window)
+        }
+
         mainWindow = window
     }
 
@@ -606,10 +613,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.terminate(nil)
     }
 
+    private static func pinSidebarItem(in window: NSWindow?) {
+        guard let split = findSplitView(in: window?.contentView),
+              let controller = split.delegate as? NSSplitViewController,
+              let sidebar = controller.splitViewItems.first else { return }
+        sidebar.canCollapse = false
+        sidebar.canCollapseFromWindowResize = false
+        sidebar.minimumThickness = DesignSystem.Layout.sidebarWidth
+        sidebar.maximumThickness = DesignSystem.Layout.sidebarWidth
+    }
+
+    private static func findSplitView(in view: NSView?) -> NSSplitView? {
+        guard let view else { return nil }
+        if let split = view as? NSSplitView { return split }
+        for subview in view.subviews {
+            if let found = findSplitView(in: subview) { return found }
+        }
+        return nil
+    }
+
     // MARK: - NSWindowDelegate
 
     func windowDidBecomeMain(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === mainWindow else { return }
+        Self.pinSidebarItem(in: window)
         showDockIconIfNeeded()
     }
 
