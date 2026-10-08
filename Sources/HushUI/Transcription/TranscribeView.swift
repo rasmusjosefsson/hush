@@ -15,9 +15,9 @@ struct TranscribeView: View {
                     viewModel: viewModel
                 )
             } else if viewModel.isTranscribing {
-                progressView
+                UnderlappedCenteredView { progressView }
             } else {
-                dropZoneView
+                UnderlappedCenteredView { dropZoneView }
             }
         }
         .navigationTitle("Transcribe")

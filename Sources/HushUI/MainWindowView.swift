@@ -354,6 +354,22 @@ public struct MainWindowView: View {
     }
 }
 
+/// Vertically centers content inside a ScrollView that fills the page. A scroll
+/// view reaching the top edge underlaps the title bar — that's what keeps the
+/// header band hidden at rest and gives the scroll material on scroll.
+struct UnderlappedCenteredView<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        GeometryReader { proxy in
+            ScrollView {
+                content()
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+            }
+        }
+    }
+}
+
 // MARK: - Previews
 
 struct MainWindowView_Previews: PreviewProvider {

@@ -14,11 +14,15 @@ public struct DictationHistoryView: View {
     public var body: some View {
         VStack(spacing: 0) {
             if viewModel.groupedDictations.isEmpty {
-                historyHeader
-                    .padding(.horizontal, DesignSystem.Spacing.lg)
-                    .padding(.top, DesignSystem.Spacing.md)
-                    .padding(.bottom, DesignSystem.Spacing.sm)
-                emptyState
+                UnderlappedCenteredView {
+                    VStack(spacing: 0) {
+                        historyHeader
+                            .padding(.horizontal, DesignSystem.Spacing.lg)
+                            .padding(.top, DesignSystem.Spacing.md)
+                            .padding(.bottom, DesignSystem.Spacing.sm)
+                        emptyState
+                    }
+                }
             } else {
                 dictationList
             }
