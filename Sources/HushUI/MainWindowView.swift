@@ -147,7 +147,8 @@ struct SidebarRow: View {
                 IconTile(item: item)
             }
             .foregroundStyle(isSelected && activeState != .inactive ? Color.white : Color.primary)
-            .padding(.horizontal, 8)
+            .padding(.leading, 6)
+            .padding(.trailing, 8)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
@@ -222,13 +223,13 @@ public struct MainWindowView: View {
                 Group {
                     switch state.selectedItem {
                     case .transcribe:
-                        TranscribeView(viewModel: transcriptionViewModel, showingProgressDetail: $state.showingProgressDetail, onNavigateBack: { state.navigateBack() })
+                        TranscribeView(viewModel: transcriptionViewModel, showingProgressDetail: $state.showingProgressDetail)
                     case .conversation:
                         ConversationView(viewModel: conversationViewModel)
                     case .library:
                         TranscriptionLibraryView(viewModel: libraryViewModel) { transcription in
                             transcriptionViewModel.currentTranscription = transcription
-                            state.navigateToTranscription(from: .library)
+                            state.navigateToTranscription()
                         }
                     case .dictations:
                         DictationHistoryView(viewModel: historyViewModel)
