@@ -147,7 +147,7 @@ struct SidebarRow: View {
                 IconTile(item: item)
             }
             .foregroundStyle(isSelected && activeState != .inactive ? Color.white : Color.primary)
-            .padding(.leading, 4)
+            .padding(.leading, 2)
             .padding(.trailing, 6)
             .padding(.vertical, 5)
             .frame(maxWidth: .infinity, alignment: .leading)
