@@ -172,27 +172,16 @@ struct CustomWordsView: View {
     }
 
     private var emptyWordsState: some View {
-        VStack(spacing: DesignSystem.Spacing.lg) {
-            Spacer()
-
-            Image(systemName: viewModel.words.isEmpty ? "character.textbox" : "magnifyingglass")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(DesignSystem.Colors.accent)
-                .opacity(0.5)
-
-            VStack(spacing: DesignSystem.Spacing.sm) {
-                Text(viewModel.words.isEmpty ? "No custom words yet" : "No matches")
-                    .font(DesignSystem.Typography.pageTitle)
-                    .foregroundStyle(.primary)
-                if viewModel.words.isEmpty {
+        Group {
+            if viewModel.words.isEmpty {
+                ContentUnavailableView {
+                    Label("No Custom Words", systemImage: "character.textbox")
+                } description: {
                     Text("Add words to fix spelling or capitalization that the speech engine gets wrong.")
-                        .font(DesignSystem.Typography.bodySmall)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
                 }
+            } else {
+                ContentUnavailableView.search
             }
-
-            Spacer()
         }
         .frame(maxWidth: .infinity)
     }

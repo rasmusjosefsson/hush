@@ -1,5 +1,6 @@
 import AppKit
 import HushCore
+import HushObjCShims
 import HushUI
 import HushViewModels
 import SwiftUI
@@ -49,6 +50,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         FileLogger.shared.log("App launched", level: .info, category: .app)
+        // Lock the navigation sidebar at its fixed width — the split-view
+        // divider can otherwise be dragged despite the column constraints.
+        HushPinSplitViewDivider()
         setupMainMenu()
         setupMenuBar()
         setupEnvironment()
@@ -490,7 +494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc private func openMainWindowToSettings() {
-        mainWindowState.selectedItem = .settings
+        mainWindowState.selectedItem = .general
         openMainWindow()
     }
 
@@ -574,10 +578,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 width: DesignSystem.Layout.sidebarMinWidth + DesignSystem.Layout.contentMinWidth,
                 height: DesignSystem.Layout.windowMinHeight
             ),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
+        window.contentViewController = NSHostingController(rootView: contentView)
         window.title = mainWindowState.selectedItem.rawValue
         window.center()
         window.setFrameAutosaveName("MainWindow2")
@@ -585,12 +590,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             width: DesignSystem.Layout.sidebarMinWidth + DesignSystem.Layout.contentMinWidth,
             height: DesignSystem.Layout.windowMinHeight
         )
+        // System Settings-style chrome: sidebar runs under the traffic lights, title sits in the
+        // toolbar, and scrolled content blurs beneath it (titlebar must stay non-transparent)
         window.titlebarAppearsTransparent = false
         window.titleVisibility = .visible
-        window.contentView = NSHostingView(rootView: contentView)
+        window.toolbar = NSToolbar(identifier: "MainWindowToolbar")
+        window.toolbarStyle = .unified
         window.delegate = self
         window.isReleasedWhenClosed = false
 
+        // Pin the sidebar column at its fixed width using the supported API —
+        // the split view's delegate is an NSSplitViewController; setting it
+        // crashes, but reading it is fine.
+        DispatchQueue.main.async { [weak window] in
+            Self.pinSidebarItem(in: window)
+        }
 
         mainWindow = window
     }
@@ -599,10 +613,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.terminate(nil)
     }
 
+    private static func pinSidebarItem(in window: NSWindow?) {
+        guard let split = findSplitView(in: window?.contentView),
+              let controller = split.delegate as? NSSplitViewController,
+              let sidebar = controller.splitViewItems.first else { return }
+        sidebar.canCollapse = false
+        sidebar.canCollapseFromWindowResize = false
+        sidebar.minimumThickness = DesignSystem.Layout.sidebarWidth
+        sidebar.maximumThickness = DesignSystem.Layout.sidebarWidth
+    }
+
+    private static func findSplitView(in view: NSView?) -> NSSplitView? {
+        guard let view else { return nil }
+        if let split = view as? NSSplitView { return split }
+        for subview in view.subviews {
+            if let found = findSplitView(in: subview) { return found }
+        }
+        return nil
+    }
+
     // MARK: - NSWindowDelegate
 
     func windowDidBecomeMain(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === mainWindow else { return }
+        Self.pinSidebarItem(in: window)
         showDockIconIfNeeded()
     }
 
@@ -656,3 +690,5 @@ extension AppDelegate: NSMenuDelegate {
         rebuildRecentDictationsSubmenu(with: dictations)
     }
 }
+
+

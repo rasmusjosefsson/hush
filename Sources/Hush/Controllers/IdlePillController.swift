@@ -203,19 +203,18 @@ final class IdlePillController {
         }
 
         if position == .top {
-            // Top/notch position: grow-down pill is centered in the panel
-            // Collapsed: small centered area at top for the dots row
-            let collapsedW: CGFloat = notch.notchWidth + 30
-            let collapsedH: CGFloat = notch.notchHeight + 20
+            // Top/notch position: idle is invisible, so the hardware notch itself is the trigger
+            let collapsedW: CGFloat = notch.notchWidth
+            let collapsedH: CGFloat = notch.notchHeight
             let collapsedX = (panelWidth - collapsedW) / 2
             let collapsedY = panelHeight - collapsedH
             tracker.collapsedPillRect = NSRect(x: collapsedX, y: collapsedY, width: collapsedW, height: collapsedH)
 
-            // Expanded: wider area covering the full grow-down content + tooltip
-            let expandedW: CGFloat = notch.notchWidth + 100
-            let expandedH: CGFloat = panelHeight
+            // Expanded: the grown notch surface (notch + ears, hint row below the camera)
+            let expandedW: CGFloat = notch.notchWidth + 112
+            let expandedH: CGFloat = notch.notchHeight + 44
             let expandedX = (panelWidth - expandedW) / 2
-            let expandedY: CGFloat = 0
+            let expandedY: CGFloat = panelHeight - expandedH
             tracker.expandedPillRect = NSRect(x: expandedX, y: expandedY, width: expandedW, height: expandedH)
         } else {
             // Bottom position: pill is at the bottom of the panel

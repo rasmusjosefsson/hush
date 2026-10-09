@@ -238,27 +238,16 @@ struct TextSnippetsView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: DesignSystem.Spacing.lg) {
-            Spacer()
-
-            Image(systemName: viewModel.snippets.isEmpty ? "text.insert" : "magnifyingglass")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(DesignSystem.Colors.accent)
-                .opacity(0.5)
-
-            VStack(spacing: DesignSystem.Spacing.sm) {
-                Text(viewModel.snippets.isEmpty ? "No text snippets yet" : "No matches")
-                    .font(DesignSystem.Typography.pageTitle)
-                    .foregroundStyle(.primary)
-                if viewModel.snippets.isEmpty {
+        Group {
+            if viewModel.snippets.isEmpty {
+                ContentUnavailableView {
+                    Label("No Text Snippets", systemImage: "text.insert")
+                } description: {
                     Text("Say a trigger phrase during dictation and it expands to full text.")
-                        .font(DesignSystem.Typography.bodySmall)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
                 }
+            } else {
+                ContentUnavailableView.search
             }
-
-            Spacer()
         }
         .frame(maxWidth: .infinity)
     }

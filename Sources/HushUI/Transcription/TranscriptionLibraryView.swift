@@ -9,57 +9,31 @@ struct TranscriptionLibraryView: View {
     @State private var pendingDelete: Transcription?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Filter bar
-            HStack(spacing: 0) {
-                ForEach(LibraryFilter.allCases, id: \.self) { filter in
-                    Button {
-                        viewModel.filter = filter
-                    } label: {
-                        Text(filter.rawValue)
-                            .font(DesignSystem.Typography.bodySmall.weight(
-                                viewModel.filter == filter ? .semibold : .regular
-                            ))
-                            .padding(.horizontal, DesignSystem.Spacing.md)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule()
-                                    .fill(viewModel.filter == filter
-                                          ? DesignSystem.Colors.accent.opacity(0.12)
-                                          : .clear)
-                            )
-                    }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(viewModel.filter == filter ? DesignSystem.Colors.accent : DesignSystem.Colors.textSecondary)
-                }
-                Spacer()
-            }
-            .padding(.horizontal, DesignSystem.Spacing.lg)
-            .padding(.top, DesignSystem.Spacing.md)
-            .padding(.bottom, DesignSystem.Spacing.sm)
-
-            // Grid
+        Group {
             if viewModel.filteredTranscriptions.isEmpty {
-                emptyState
+                UnderlappedCenteredView { emptyState }
             } else {
                 ScrollView {
-                    LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: DesignSystem.Layout.thumbnailCardMinWidth), spacing: DesignSystem.Spacing.md)],
-                        spacing: DesignSystem.Spacing.md
-                    ) {
-                        ForEach(viewModel.filteredTranscriptions) { transcription in
-                            TranscriptionThumbnailCard(transcription: transcription, searchText: viewModel.searchText, onTap: {
-                                onSelect(transcription)
-                            }, contextMenu: {
-                                libraryMenuItems(for: transcription)
-                            })
-                            .contextMenu {
-                                libraryMenuItems(for: transcription)
+                    VStack(alignment: .leading, spacing: 0) {
+                        filterBar
+                        LazyVGrid(
+                            columns: [GridItem(.adaptive(minimum: DesignSystem.Layout.thumbnailCardMinWidth), spacing: DesignSystem.Spacing.md)],
+                            spacing: DesignSystem.Spacing.md
+                        ) {
+                            ForEach(viewModel.filteredTranscriptions) { transcription in
+                                TranscriptionThumbnailCard(transcription: transcription, searchText: viewModel.searchText, onTap: {
+                                    onSelect(transcription)
+                                }, contextMenu: {
+                                    libraryMenuItems(for: transcription)
+                                })
+                                .contextMenu {
+                                    libraryMenuItems(for: transcription)
+                                }
                             }
                         }
+                        .padding(.horizontal, DesignSystem.Spacing.lg)
+                        .padding(.bottom, DesignSystem.Spacing.lg)
                     }
-                    .padding(.horizontal, DesignSystem.Spacing.lg)
-                    .padding(.bottom, DesignSystem.Spacing.lg)
                 }
             }
         }
@@ -90,6 +64,35 @@ struct TranscriptionLibraryView: View {
         }
     }
 
+    private var filterBar: some View {
+        HStack(spacing: 0) {
+            ForEach(LibraryFilter.allCases, id: \.self) { filter in
+                Button {
+                    viewModel.filter = filter
+                } label: {
+                    Text(filter.rawValue)
+                        .font(DesignSystem.Typography.bodySmall.weight(
+                            viewModel.filter == filter ? .semibold : .regular
+                        ))
+                        .padding(.horizontal, DesignSystem.Spacing.md)
+                        .padding(.vertical, 8)
+                        .background(
+                            Capsule()
+                                .fill(viewModel.filter == filter
+                                      ? DesignSystem.Colors.accent.opacity(0.12)
+                                      : .clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(viewModel.filter == filter ? DesignSystem.Colors.accent : DesignSystem.Colors.textSecondary)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, DesignSystem.Spacing.lg)
+        .padding(.top, DesignSystem.Spacing.sm)
+        .padding(.bottom, DesignSystem.Spacing.xs)
+    }
+
     @ViewBuilder
     private func libraryMenuItems(for transcription: Transcription) -> some View {
         Button {
@@ -117,28 +120,16 @@ struct TranscriptionLibraryView: View {
     }
 
     private var emptyState: some View {
-        VStack(spacing: DesignSystem.Spacing.lg) {
-            Spacer()
-
-            Image(systemName: viewModel.searchText.isEmpty ? "doc.text" : "magnifyingglass")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(DesignSystem.Colors.accent)
-                .opacity(0.5)
-
-            VStack(spacing: DesignSystem.Spacing.sm) {
-                Text(viewModel.searchText.isEmpty
-                     ? "No transcriptions yet"
-                     : "No matching transcriptions")
-                    .font(DesignSystem.Typography.pageTitle)
-                    .foregroundStyle(.primary)
-                Text(viewModel.searchText.isEmpty
-                     ? "Transcribe a file to get started."
-                     : "Try different words or clear your search.")
-                    .font(DesignSystem.Typography.bodySmall)
-                    .foregroundStyle(.secondary)
+        Group {
+            if viewModel.searchText.isEmpty {
+                ContentUnavailableView {
+                    Label("No Transcriptions", systemImage: "doc.text")
+                } description: {
+                    Text("Transcribe a file to get started.")
+                }
+            } else {
+                ContentUnavailableView.search(text: viewModel.searchText)
             }
-
-            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }

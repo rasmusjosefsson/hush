@@ -29,14 +29,14 @@ struct TranscriptionThumbnailCard<MenuContent: View>: View {
                     .font(.caption.weight(.semibold))
                     .lineLimit(2)
                     .truncationMode(.middle)
+                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .topLeading)
 
-                if let duration = transcription.durationMs {
-                    Text(formatDuration(duration))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
+                Text(transcription.durationMs.map(formatDuration) ?? " ")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
             }
             .padding(8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(
                 RoundedRectangle(cornerRadius: 12)
                     .fill(Color(.controlBackgroundColor))

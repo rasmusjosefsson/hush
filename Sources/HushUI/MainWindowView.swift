@@ -8,23 +8,162 @@ public enum SidebarItem: String, CaseIterable, Identifiable {
     case library = "Library"
     case dictations = "Dictations"
     case vocabulary = "AI Processing"
-    case settings = "Settings"
+    case general = "General"
+    case appearance = "Appearance"
+    case dictation = "Dictation"
+    case speechModel = "Speech Model"
+    case privacy = "Privacy & Security"
+    case storage = "Storage"
 
     public var id: String { rawValue }
 
     public var icon: String {
         switch self {
         case .transcribe: return "waveform"
-        case .conversation: return "message.fill"
-        case .library: return "square.grid.2x2"
-        case .dictations: return "clock.arrow.circlepath"
+        case .conversation: return "bubble.left.and.bubble.right.fill"
+        case .library: return "square.grid.2x2.fill"
+        case .dictations: return "text.bubble.fill"
         case .vocabulary: return "wand.and.stars"
-        case .settings: return "gearshape"
+        case .general: return "gearshape.fill"
+        case .appearance: return "circle.lefthalf.filled"
+        case .dictation: return "mic.fill"
+        case .speechModel: return "cpu.fill"
+        case .privacy: return "hand.raised.fill"
+        case .storage: return "internaldrive.fill"
         }
     }
 
-    public static let primaryItems: [SidebarItem] = [.transcribe, .conversation, .library, .dictations]
-    public static let configItems: [SidebarItem] = [.vocabulary, .settings]
+    /// Tile color, in the style of System Settings' sidebar.
+    public var tint: Color {
+        switch self {
+        case .transcribe: return DesignSystem.Colors.accent
+        case .conversation: return Color(nsColor: .systemGreen)
+        case .library: return Color(nsColor: .systemOrange)
+        case .dictations: return Color(nsColor: .systemBlue)
+        case .vocabulary: return Color(nsColor: .systemPurple)
+        case .general, .storage: return Color(nsColor: .systemGray)
+        case .appearance: return Color(white: 0.12)
+        case .dictation: return Color(nsColor: .systemRed)
+        case .speechModel: return Color(nsColor: .systemIndigo)
+        case .privacy: return Color(nsColor: .systemBlue)
+        }
+    }
+
+    /// Extra terms the sidebar search matches, like System Settings.
+    var keywords: [String] {
+        switch self {
+        case .transcribe: return ["file", "audio", "video", "youtube"]
+        case .conversation: return ["chat", "assistant"]
+        case .library: return ["transcriptions", "files"]
+        case .dictations: return ["history", "stats"]
+        case .vocabulary: return ["words", "snippets", "vocabulary", "ai"]
+        case .general: return ["login", "menu bar", "logs", "diagnostics", "about", "onboarding"]
+        case .appearance: return ["accent", "color", "notch", "overlay", "theme"]
+        case .dictation: return ["shortcut", "hotkey", "microphone", "silence", "sound", "system audio"]
+        case .speechModel: return ["parakeet", "whisper", "download", "engine"]
+        case .privacy: return ["permissions", "accessibility", "microphone", "screen recording"]
+        case .storage: return ["history", "audio", "delete", "clear"]
+        }
+    }
+
+    func matches(_ query: String) -> Bool {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        return q.isEmpty || ([rawValue] + keywords).contains { $0.localizedCaseInsensitiveContains(q) }
+    }
+
+    /// Glyph color on the dark tile (dark mode); graphite items stay light.
+    var glyphTint: Color {
+        switch self {
+        case .general, .storage, .appearance: return Color(white: 0.85)
+        default: return tint
+        }
+    }
+
+    public var settingsPane: SettingsPane? {
+        switch self {
+        case .general: return .general
+        case .appearance: return .appearance
+        case .dictation: return .dictation
+        case .speechModel: return .speechModel
+        case .privacy: return .privacy
+        case .storage: return .storage
+        default: return nil
+        }
+    }
+
+    public static let primaryItems: [SidebarItem] = [.transcribe, .conversation, .library, .dictations, .vocabulary]
+    public static let settingsItems: [SidebarItem] = [.general, .appearance, .dictation, .speechModel, .privacy, .storage]
+}
+
+/// Rounded-square icon used in the sidebar and pane headers, matching System Settings:
+/// white glyph on a colored tile in light mode, colored glyph on a dark tile in dark mode.
+public struct IconTile: View {
+    let item: SidebarItem
+    var size: CGFloat = 20
+    @Environment(\.colorScheme) private var colorScheme
+
+    public init(item: SidebarItem, size: CGFloat = 20) {
+        self.item = item
+        self.size = size
+    }
+
+    public var body: some View {
+        let dark = colorScheme == .dark
+        let shape = RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
+        let glyph: Color = dark ? item.glyphTint : .white
+        ZStack {
+            if dark {
+                shape.fill(LinearGradient(colors: [Color(white: 0.17), Color(white: 0.10)], startPoint: .top, endPoint: .bottom))
+            } else {
+                shape.fill(item.tint.gradient)
+            }
+            if item == .transcribe {
+                BrandWaveformView(size: size * 0.7, color: glyph)
+            } else {
+                Image(systemName: item.icon)
+                    .font(.system(size: size * 0.52, weight: .semibold))
+                    .foregroundStyle(glyph)
+            }
+        }
+        .frame(width: size, height: size)
+        .overlay(shape.strokeBorder(.white.opacity(dark ? 0.10 : 0.12), lineWidth: 0.5))
+    }
+}
+
+/// Sidebar row with System Settings-style selection: solid accent fill, white label,
+/// gray when the window is inactive.
+struct SidebarRow: View {
+    let item: SidebarItem
+    let isSelected: Bool
+    let action: () -> Void
+    @Environment(\.controlActiveState) private var activeState
+
+    var body: some View {
+        Button(action: action) {
+            Label {
+                Text(item.rawValue)
+                    .lineLimit(1)
+            } icon: {
+                IconTile(item: item)
+            }
+            .foregroundStyle(isSelected && activeState != .inactive ? Color.white : Color.primary)
+            .padding(.leading, 2)
+            .padding(.trailing, 6)
+            .padding(.vertical, 5)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected
+                          ? (activeState == .inactive ? Color.primary.opacity(0.12) : DesignSystem.Colors.accent)
+                          : .clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowInsets(EdgeInsets(top: 1, leading: 0, bottom: 1, trailing: 0))
+        .listRowSeparator(.hidden)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+    }
 }
 
 public struct MainWindowView: View {
@@ -37,6 +176,12 @@ public struct MainWindowView: View {
     let customWordsViewModel: CustomWordsViewModel
     let textSnippetsViewModel: TextSnippetsViewModel
     let libraryViewModel: TranscriptionLibraryViewModel
+
+    @AppStorage(AccentChoice.storageKey) private var accentRaw = AccentChoice.default.rawValue
+    @State private var sidebarSearch = ""
+
+    /// Fixed sidebar width; fits the longest label ("Privacy & Security") with icon and padding.
+    private static let sidebarWidth: CGFloat = DesignSystem.Layout.sidebarWidth
 
     public init(state: MainWindowState, transcriptionViewModel: TranscriptionViewModel, conversationViewModel: ConversationViewModel, historyViewModel: DictationHistoryViewModel, settingsViewModel: SettingsViewModel, customWordsViewModel: CustomWordsViewModel, textSnippetsViewModel: TextSnippetsViewModel, libraryViewModel: TranscriptionLibraryViewModel) {
         self.state = state
@@ -52,36 +197,39 @@ public struct MainWindowView: View {
     public var body: some View {
         VStack(spacing: 0) {
             NavigationSplitView(columnVisibility: .constant(.all)) {
-                List(selection: $state.selectedItem) {
+                List {
                     Section {
-                        ForEach(SidebarItem.primaryItems) { item in
-                            sidebarLabel(for: item)
-                                .tag(item)
+                        ForEach(SidebarItem.primaryItems.filter { $0.matches(sidebarSearch) }) { item in
+                            SidebarRow(item: item, isSelected: state.selectedItem == item) {
+                                state.selectedItem = item
+                            }
                         }
                     }
 
                     Section {
-                        ForEach(SidebarItem.configItems) { item in
-                            sidebarLabel(for: item)
-                                .tag(item)
+                        ForEach(SidebarItem.settingsItems.filter { $0.matches(sidebarSearch) }) { item in
+                            SidebarRow(item: item, isSelected: state.selectedItem == item) {
+                                state.selectedItem = item
+                            }
                         }
                     }
                 }
                 .listStyle(.sidebar)
-                .tint(DesignSystem.Colors.accent)
-                .frame(minWidth: 150)
+                .searchable(text: $sidebarSearch, placement: .sidebar, prompt: "Search")
+                .navigationSplitViewColumnWidth(min: Self.sidebarWidth, ideal: Self.sidebarWidth, max: Self.sidebarWidth)
+                .frame(width: Self.sidebarWidth)
                 .toolbar(removing: .sidebarToggle)
             } detail: {
                 Group {
                     switch state.selectedItem {
                     case .transcribe:
-                        TranscribeView(viewModel: transcriptionViewModel, showingProgressDetail: $state.showingProgressDetail, onNavigateBack: { state.navigateBack() })
+                        TranscribeView(viewModel: transcriptionViewModel, showingProgressDetail: $state.showingProgressDetail)
                     case .conversation:
                         ConversationView(viewModel: conversationViewModel)
                     case .library:
                         TranscriptionLibraryView(viewModel: libraryViewModel) { transcription in
                             transcriptionViewModel.currentTranscription = transcription
-                            state.navigateToTranscription(from: .library)
+                            state.navigateToTranscription()
                         }
                     case .dictations:
                         DictationHistoryView(viewModel: historyViewModel)
@@ -91,12 +239,28 @@ public struct MainWindowView: View {
                             customWordsViewModel: customWordsViewModel,
                             textSnippetsViewModel: textSnippetsViewModel
                         )
-                    case .settings:
-                        SettingsView(viewModel: settingsViewModel)
+                    case .general, .appearance, .dictation, .speechModel, .privacy, .storage:
+                        SettingsView(viewModel: settingsViewModel, pane: state.selectedItem.settingsPane ?? .general)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(DesignSystem.Colors.background)
+                // Accent is read from a static token; rebuild the detail when it changes.
+                .id(accentRaw)
+                .toolbar {
+                    // Present on every page so the toolbar (and traffic lights) never change height
+                    ToolbarItem(placement: .navigation) {
+                        ControlGroup {
+                            Button { state.goBack() } label: { Label("Back", systemImage: "chevron.backward") }
+                                .disabled(!state.canGoBack)
+                                .keyboardShortcut("[", modifiers: .command)
+                            Button { state.goForward() } label: { Label("Forward", systemImage: "chevron.forward") }
+                                .disabled(!state.canGoForward)
+                                .keyboardShortcut("]", modifiers: .command)
+                        }
+                        .controlGroupStyle(.navigation)
+                    }
+                }
             }
             .navigationSplitViewStyle(.balanced)
 
@@ -104,6 +268,7 @@ public struct MainWindowView: View {
                 globalTranscriptionBottomBar
             }
         }
+        .tint(DesignSystem.Colors.accent)
         .frame(
             minWidth: 860,
             minHeight: DesignSystem.Layout.windowMinHeight
@@ -116,19 +281,6 @@ public struct MainWindowView: View {
             if !isTranscribing {
                 state.showingProgressDetail = false
             }
-        }
-    }
-
-    @ViewBuilder
-    private func sidebarLabel(for item: SidebarItem) -> some View {
-        if item == .transcribe {
-            Label {
-                Text(item.rawValue)
-            } icon: {
-                BrandWaveformView(size: 16, color: .primary)
-            }
-        } else {
-            Label(item.rawValue, systemImage: item.icon)
         }
     }
 
@@ -198,6 +350,22 @@ public struct MainWindowView: View {
         .background(DesignSystem.Colors.cardBackground)
         .overlay(alignment: .top) {
             Divider()
+        }
+    }
+}
+
+/// Vertically centers content inside a ScrollView that fills the page. A scroll
+/// view reaching the top edge underlaps the title bar — that's what keeps the
+/// header band hidden at rest and gives the scroll material on scroll.
+struct UnderlappedCenteredView<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        GeometryReader { proxy in
+            ScrollView {
+                content()
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
+            }
         }
     }
 }

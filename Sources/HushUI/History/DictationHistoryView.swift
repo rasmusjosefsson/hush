@@ -14,11 +14,15 @@ public struct DictationHistoryView: View {
     public var body: some View {
         VStack(spacing: 0) {
             if viewModel.groupedDictations.isEmpty {
-                historyHeader
-                    .padding(.horizontal, DesignSystem.Spacing.lg)
-                    .padding(.top, DesignSystem.Spacing.md)
-                    .padding(.bottom, DesignSystem.Spacing.sm)
-                emptyState
+                UnderlappedCenteredView {
+                    VStack(spacing: 0) {
+                        historyHeader
+                            .padding(.horizontal, DesignSystem.Spacing.lg)
+                            .padding(.top, DesignSystem.Spacing.md)
+                            .padding(.bottom, DesignSystem.Spacing.sm)
+                        emptyState
+                    }
+                }
             } else {
                 dictationList
             }
@@ -82,23 +86,23 @@ public struct DictationHistoryView: View {
                 }
             } label: {
                 HStack(spacing: DesignSystem.Spacing.sm) {
-                    BrandWaveformView(size: 16, color: DesignSystem.Colors.accent)
-                        .frame(width: 30, height: 30)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8)
-                                .fill(DesignSystem.Colors.accent.opacity(0.12))
-                        )
+                    IconTile(item: .dictations, size: 36)
 
                     if stats.isEmpty {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Your Voice Stats")
-                                .font(DesignSystem.Typography.sectionTitle)
-                            Text("Start dictating to see your stats")
-                                .font(DesignSystem.Typography.caption)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Dictations")
+                                .font(.headline)
+                            Text("Start dictating to see your stats.")
+                                .font(.subheadline)
                                 .foregroundStyle(.secondary)
                         }
                     } else {
-                        collapsedStatsSummary(stats)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Dictations")
+                                .font(.headline)
+                            collapsedStatsSummary(stats)
+                                .foregroundStyle(.secondary)
+                        }
                     }
 
                     Spacer()
@@ -119,20 +123,8 @@ public struct DictationHistoryView: View {
                     .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.horizontal, DesignSystem.Spacing.md)
-        .padding(.vertical, stats.isEmpty || !statsExpanded ? DesignSystem.Spacing.sm : DesignSystem.Spacing.md)
-        .background(
-            RoundedRectangle(cornerRadius: DesignSystem.Layout.cardCornerRadius)
-                .fill(DesignSystem.Colors.cardBackground)
-                .cardShadow(DesignSystem.Shadows.cardRest)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: DesignSystem.Layout.cardCornerRadius)
-                .strokeBorder(
-                    DesignSystem.Colors.border.opacity(0.6),
-                    lineWidth: 0.5
-                )
-        )
+        .padding(DesignSystem.Spacing.md)
+        .background(GroupedBackground())
     }
 
     private func collapsedStatsSummary(_ stats: DictationStats) -> some View {
@@ -140,7 +132,6 @@ public struct DictationHistoryView: View {
             var result: [Text] = []
             result.append(
                 Text("\(stats.totalWords.compactFormatted) words")
-                    .fontWeight(.semibold)
             )
             result.append(Text(" · \(stats.totalDurationMs.friendlyDuration)"))
             result.append(Text(" · \(stats.averageWPM.formattedWPM)"))
@@ -148,7 +139,7 @@ public struct DictationHistoryView: View {
             return result
         }()
         return parts.reduce(Text("")) { $0 + $1 }
-            .font(DesignSystem.Typography.caption)
+            .font(.subheadline)
             .lineLimit(1)
     }
 
@@ -271,31 +262,18 @@ public struct DictationHistoryView: View {
     // MARK: - Empty State
 
     private var emptyState: some View {
-        VStack(spacing: DesignSystem.Spacing.lg) {
-            Spacer()
-
-            Image(systemName: viewModel.searchText.isEmpty ? "mic.circle" : "magnifyingglass")
-                .font(.system(size: 40, weight: .light))
-                .foregroundStyle(DesignSystem.Colors.accent)
-                .opacity(0.5)
-
-            VStack(spacing: DesignSystem.Spacing.sm) {
-                Text(viewModel.searchText.isEmpty
-                     ? "Your voice, captured."
-                     : "No matching records")
-                    .font(DesignSystem.Typography.pageTitle)
-                    .foregroundStyle(.primary)
-
-                Text(viewModel.searchText.isEmpty
-                     ? "Double-tap \(HotkeyTrigger.current.displayName) to start dictating from any app."
-                     : "Try different words or clear your search.")
-                    .font(DesignSystem.Typography.bodySmall)
-                    .foregroundStyle(.secondary)
+        Group {
+            if viewModel.searchText.isEmpty {
+                ContentUnavailableView {
+                    Label("Your voice, captured.", systemImage: "mic")
+                } description: {
+                    Text("Double-tap \(HotkeyTrigger.current.displayName) to start dictating from any app.")
+                }
+            } else {
+                ContentUnavailableView.search(text: viewModel.searchText)
             }
-
-            Spacer()
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Card-Based List
@@ -310,21 +288,21 @@ public struct DictationHistoryView: View {
             LazyVStack(alignment: .leading, spacing: 0) {
                 ForEach(viewModel.groupedDictations, id: \.0) { dateHeader, dictations in
                     HStack(alignment: .firstTextBaseline, spacing: DesignSystem.Spacing.sm) {
-                        Text(dateHeader.uppercased())
-                            .font(DesignSystem.Typography.sectionHeader)
-                            .foregroundStyle(DesignSystem.Colors.accent.opacity(0.8))
+                        Text(dateHeader)
+                            .font(.headline)
                         Text("\(dictations.count)")
-                            .font(DesignSystem.Typography.duration)
+                            .font(.subheadline.monospacedDigit())
                             .foregroundStyle(.secondary)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(DesignSystem.Colors.surfaceElevated))
                     }
-                    .padding(.horizontal, DesignSystem.Spacing.lg)
+                    .padding(.horizontal, DesignSystem.Spacing.lg + DesignSystem.Spacing.xs)
                     .padding(.top, DesignSystem.Spacing.lg)
                     .padding(.bottom, DesignSystem.Spacing.sm)
 
+                    VStack(spacing: 0) {
                     ForEach(dictations) { dictation in
+                        if dictation.id != dictations.first?.id {
+                            Divider().padding(.horizontal, DesignSystem.Spacing.md)
+                        }
                         DictationCardRow(
                             dictation: dictation,
                             searchText: viewModel.searchText,
@@ -345,9 +323,10 @@ public struct DictationHistoryView: View {
                             isProcessing: viewModel.processingDictationIDs.contains(dictation.id),
                             reprocessingProgress: viewModel.processingProgress[dictation.id]
                         )
-                        .padding(.horizontal, DesignSystem.Spacing.lg)
-                        .padding(.bottom, DesignSystem.Spacing.sm)
                     }
+                    }
+                    .background(GroupedBackground())
+                    .padding(.horizontal, DesignSystem.Spacing.lg)
                 }
             }
             .padding(.bottom, DesignSystem.Spacing.md)
@@ -431,6 +410,14 @@ public struct DictationHistoryView: View {
                     Divider()
                 }
         )
+    }
+}
+
+/// Rounded fill matching grouped Form sections (no shadow, no border).
+private struct GroupedBackground: View {
+    var body: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(DesignSystem.Colors.surface)
     }
 }
 
@@ -519,145 +506,123 @@ public struct DictationCardRow: View {
     }
 
     public var body: some View {
-        VStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
-            HStack(spacing: DesignSystem.Spacing.md) {
-                VStack(alignment: .leading, spacing: 2) {
-                    HStack(spacing: 0) {
-                        Text(formatTime(dictation.createdAt))
-                            .font(DesignSystem.Typography.caption)
-                            .foregroundStyle(.secondary)
+        HStack(alignment: .top, spacing: DesignSystem.Spacing.md) {
+            VStack(alignment: .leading, spacing: 4) {
+                if showSpeakerView, dictation.hasSpeakerData {
+                    speakerFormattedView
+                } else {
+                    Text(highlightedTranscript)
+                        .font(DesignSystem.Typography.body)
+                        .foregroundStyle(.primary)
+                        .lineLimit(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
-                        Text("\u{2009}\u{00B7}\u{2009}")
-                            .font(DesignSystem.Typography.caption)
-                            .foregroundStyle(.quaternary)
+                metadataLine
 
-                        Text(dictation.durationMs.formattedDuration)
-                            .font(DesignSystem.Typography.duration)
-                            .foregroundStyle(.tertiary)
-
-                        if dictation.audioPath != nil {
-                            Text("\u{2009}\u{00B7}\u{2009}")
-                                .font(DesignSystem.Typography.caption)
-                                .foregroundStyle(.quaternary)
-
-                            Image(systemName: "mic.fill")
+                if isProcessing {
+                    VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
+                        HStack(spacing: DesignSystem.Spacing.xs) {
+                            Image(systemName: phaseIcon)
                                 .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
+                            Text(phaseLabel)
+                                .font(DesignSystem.Typography.micro)
+                            Spacer()
+                            Text(progressPercentText)
+                                .font(DesignSystem.Typography.micro.monospacedDigit())
                         }
+                        .foregroundStyle(DesignSystem.Colors.accent)
+
+                        DeterminateProgressBar(fraction: reprocessingProgress?.fractionCompleted ?? 0)
+                            .frame(height: 3)
                     }
-
-                }
-
-                Spacer()
-
-                HStack(spacing: 4) {
-                    if showModelName, let modelName = dictation.sttModelName {
-                        Text(modelName)
-                            .font(DesignSystem.Typography.caption)
-                            .foregroundStyle(.tertiary)
-                            .padding(.trailing, 4)
-                    }
-
-                    if isProcessing {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(width: 28, height: 28)
-                    } else if dictation.hasSpeakerData {
-                        CardActionButton(
-                            icon: showSpeakerView ? "person.2.fill" : "person.2",
-                            color: showSpeakerView ? DesignSystem.Colors.accent : .secondary,
-                            action: { showSpeakerView.toggle() }
-                        )
-                    }
-
-                    if dictation.audioPath != nil {
-                        CardActionButton(
-                            icon: isPlayingThis ? "pause.fill" : "play.fill",
-                            color: DesignSystem.Colors.accent,
-                            action: { onTogglePlayback?() }
-                        )
-                    }
-
-                    if isCopied {
-                        Text("Copied")
-                            .font(DesignSystem.Typography.micro)
-                            .foregroundStyle(DesignSystem.Colors.successGreen)
-                            .transition(.opacity.combined(with: .scale(scale: 0.8)))
-                    }
-
-                    CardActionButton(
-                        icon: isCopied ? "checkmark" : "doc.on.clipboard",
-                        color: isCopied ? DesignSystem.Colors.successGreen : .secondary,
-                        action: { onCopy() }
-                    )
-                    .animation(DesignSystem.Animation.hoverTransition, value: isCopied)
-
-                        CardMenuButton(
-                        hasAudio: dictation.audioPath != nil,
-                        isProcessing: isProcessing,
-                        onDownloadAudio: { onDownloadAudio?() },
-                        onExportTxt: { onExportTxt?() },
-                        onExportMarkdown: { onExportMarkdown?() },
-                        onReprocessWithSpeakers: { onReprocessWithSpeakers?() },
-                        onRevealInFinder: { onRevealInFinder?() },
-                        onDelete: { onDelete() }
-                    )
+                    .padding(.top, 2)
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
                 }
             }
 
-            if showSpeakerView, dictation.hasSpeakerData {
-                speakerFormattedView
-            } else {
-                Text(highlightedTranscript)
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(.primary)
-                    .lineLimit(3)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            if isProcessing {
-                VStack(alignment: .leading, spacing: DesignSystem.Spacing.xs) {
-                    HStack(spacing: DesignSystem.Spacing.xs) {
-                        Image(systemName: phaseIcon)
-                            .font(.system(size: 10))
-                        Text(phaseLabel)
-                            .font(DesignSystem.Typography.micro)
-                        Spacer()
-                        Text(progressPercentText)
-                            .font(DesignSystem.Typography.micro.monospacedDigit())
-                    }
-                    .foregroundStyle(DesignSystem.Colors.accent)
-
-                    DeterminateProgressBar(fraction: reprocessingProgress?.fractionCompleted ?? 0)
-                        .frame(height: 3)
-                }
-                .transition(.opacity.combined(with: .move(edge: .bottom)))
-            }
+            actions
+                .opacity(isHovered || isPlayingThis || isCopied || isProcessing ? 1 : 0.55)
         }
         .animation(DesignSystem.Animation.contentSwap, value: isProcessing)
-        .padding(DesignSystem.Spacing.md)
-        .scaleEffect(isPlayingThis ? 1.005 : 1.0)
+        .padding(.horizontal, DesignSystem.Spacing.md)
+        .padding(.vertical, 10)
         .background(
-            RoundedRectangle(cornerRadius: DesignSystem.Layout.cardCornerRadius)
+            Rectangle()
                 .fill(isPlayingThis
-                      ? DesignSystem.Colors.accent.opacity(0.06)
-                      : DesignSystem.Colors.cardBackground)
-                .cardShadow(isHovered ? DesignSystem.Shadows.cardHover : DesignSystem.Shadows.cardRest)
+                      ? DesignSystem.Colors.accent.opacity(0.10)
+                      : (isHovered ? Color.primary.opacity(0.03) : .clear))
         )
-        .overlay(
-            RoundedRectangle(cornerRadius: DesignSystem.Layout.cardCornerRadius)
-                .strokeBorder(
-                    isPlayingThis ? DesignSystem.Colors.accent.opacity(0.24) : DesignSystem.Colors.border.opacity(0.5),
-                    lineWidth: 0.5
-                )
-                .allowsHitTesting(false)
-        )
+        .contentShape(Rectangle())
         .onHover { hovering in
             withAnimation(DesignSystem.Animation.hoverTransition) {
                 isHovered = hovering
             }
         }
         .animation(.easeInOut(duration: 0.15), value: isPlayingThis)
+    }
+
+    private var metadataLine: some View {
+        HStack(spacing: 0) {
+            Text(formatTime(dictation.createdAt))
+            Text("\u{2009}\u{00B7}\u{2009}")
+            Text(dictation.durationMs.formattedDuration)
+                .monospacedDigit()
+            if showModelName, let modelName = dictation.sttModelName {
+                Text("\u{2009}\u{00B7}\u{2009}")
+                Text(modelName)
+            }
+            if dictation.audioPath != nil {
+                Text("\u{2009}\u{00B7}\u{2009}")
+                Image(systemName: "waveform")
+                    .font(.system(size: 9, weight: .semibold))
+            }
+        }
+        .font(DesignSystem.Typography.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    private var actions: some View {
+        HStack(spacing: 2) {
+            if isProcessing {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 28, height: 28)
+            } else if dictation.hasSpeakerData {
+                CardActionButton(
+                    icon: showSpeakerView ? "person.2.fill" : "person.2",
+                    color: showSpeakerView ? DesignSystem.Colors.accent : .secondary,
+                    action: { showSpeakerView.toggle() }
+                )
+            }
+
+            if dictation.audioPath != nil {
+                CardActionButton(
+                    icon: isPlayingThis ? "pause.fill" : "play.fill",
+                    color: DesignSystem.Colors.accent,
+                    action: { onTogglePlayback?() }
+                )
+            }
+
+            CardActionButton(
+                icon: isCopied ? "checkmark" : "doc.on.doc",
+                color: isCopied ? DesignSystem.Colors.successGreen : .secondary,
+                action: { onCopy() }
+            )
+            .help(isCopied ? "Copied" : "Copy")
+            .animation(DesignSystem.Animation.hoverTransition, value: isCopied)
+
+            CardMenuButton(
+                hasAudio: dictation.audioPath != nil,
+                isProcessing: isProcessing,
+                onDownloadAudio: { onDownloadAudio?() },
+                onExportTxt: { onExportTxt?() },
+                onExportMarkdown: { onExportMarkdown?() },
+                onReprocessWithSpeakers: { onReprocessWithSpeakers?() },
+                onRevealInFinder: { onRevealInFinder?() },
+                onDelete: { onDelete() }
+            )
+        }
     }
 
     // MARK: - Highlighted Transcript

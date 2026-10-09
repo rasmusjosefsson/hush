@@ -6,28 +6,21 @@ import HushViewModels
 struct TranscribeView: View {
     @Bindable var viewModel: TranscriptionViewModel
     @Binding var showingProgressDetail: Bool
-    var onNavigateBack: (() -> Void)?
 
     var body: some View {
         Group {
             if let transcription = viewModel.currentTranscription {
                 TranscriptResultView(
                     transcription: transcription,
-                    viewModel: viewModel,
-                    onNavigateBack: onNavigateBack
+                    viewModel: viewModel
                 )
             } else if viewModel.isTranscribing {
-                progressView
+                UnderlappedCenteredView { progressView }
             } else {
-                dropZoneView
+                UnderlappedCenteredView { dropZoneView }
             }
         }
         .navigationTitle("Transcribe")
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Color.clear.frame(width: 0, height: 0)
-            }
-        }
     }
 
     // MARK: - Drop Zone

@@ -2,38 +2,64 @@ import SwiftUI
 import HushCore
 import HushViewModels
 
+public enum SettingsPane: String, CaseIterable, Sendable {
+    case general, appearance, dictation, speechModel, privacy, storage
+
+    var item: SidebarItem {
+        switch self {
+        case .general: .general
+        case .appearance: .appearance
+        case .dictation: .dictation
+        case .speechModel: .speechModel
+        case .privacy: .privacy
+        case .storage: .storage
+        }
+    }
+
+    var summary: String {
+        switch self {
+        case .general: "Startup behavior, diagnostics and information about Hush."
+        case .appearance: "Choose an accent color and where the dictation overlay appears."
+        case .dictation: "Click or hold your shortcut to dictate into any app. Text is pasted at your cursor."
+        case .speechModel: "Speech recognition runs on your Mac's Neural Engine. Audio never leaves your device."
+        case .privacy: "Hush needs these permissions to hear you and paste text. Nothing is sent off your Mac."
+        case .storage: "Choose what Hush keeps on this Mac."
+        }
+    }
+}
+
 public struct SettingsView: View {
     @Bindable var viewModel: SettingsViewModel
+    var pane: SettingsPane
 
     @State private var showClearDictationsAlert = false
     @State private var showClearStatsAlert = false
     @AppStorage("showModelNameOnCards") private var showModelName = true
+    @AppStorage(AccentChoice.storageKey) private var accentRaw = AccentChoice.default.rawValue
 
-    public init(viewModel: SettingsViewModel) {
+    public init(viewModel: SettingsViewModel, pane: SettingsPane = .general) {
         self.viewModel = viewModel
+        self.pane = pane
     }
 
     public var body: some View {
-        ScrollView {
-            VStack(spacing: DesignSystem.Spacing.md) {
+        Form {
+            paneHeader
+            switch pane {
+            case .general:
                 generalSection
-                dictationSection
-                storageSection
-                permissionsSection
-                modelSection
-                aboutSection
                 diagnosticsSection
+                aboutSection
+            case .appearance: appearanceSection
+            case .dictation: dictationSection
+            case .speechModel: modelSection
+            case .privacy: permissionsSection
+            case .storage: storageSection
             }
-            .padding(DesignSystem.Spacing.lg)
         }
-        .navigationTitle("Settings")
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Color.clear.frame(width: 0, height: 0)
-            }
-        }
+        .formStyle(.grouped)
         .toggleStyle(.switch)
-        .controlSize(.mini)
+        .navigationTitle(pane.item.rawValue)
         .alert("Clear All Dictations?", isPresented: $showClearDictationsAlert) {
             Button("Cancel", role: .cancel) {}
             Button("Delete All", role: .destructive) {
@@ -56,589 +82,373 @@ public struct SettingsView: View {
             viewModel.refreshModelStatus()
             viewModel.refreshInputDevices()
         }
+    }
 
+    // MARK: - Header
+
+    /// Icon + title + description card, as at the top of each System Settings pane.
+    private var paneHeader: some View {
+        Section {
+            HStack(alignment: .top, spacing: 12) {
+                IconTile(item: pane.item, size: 36)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(pane.item.rawValue)
+                        .font(.headline)
+                    Text(pane.summary)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.vertical, 4)
+        }
     }
 
     // MARK: - General
 
     private var generalSection: some View {
-        settingsCard("General") {
-            settingsToggle("Launch at login", icon: "clock", isOn: $viewModel.launchAtLogin)
-
+        Section {
+            Toggle("Launch at login", isOn: $viewModel.launchAtLogin)
             if let error = viewModel.launchAtLoginError {
-                Text(error)
-                    .font(DesignSystem.Typography.caption)
-                    .foregroundStyle(DesignSystem.Colors.errorRed)
-                    .padding(.leading, DesignSystem.Spacing.md + 28)
-                    .padding(.trailing, DesignSystem.Spacing.md)
+                footnote(error, color: DesignSystem.Colors.errorRed)
             }
+            Toggle(isOn: $viewModel.menuBarOnlyMode) {
+                Text("Menu bar only")
+                Text("Hide Hush from the Dock and app switcher.")
+            }
+        }
+    }
 
-            settingsDivider()
+    // MARK: - Appearance
 
-            settingsToggle("Show in menu bar only", icon: "menubar.rectangle", isOn: $viewModel.menuBarOnlyMode)
+    private var accentBinding: Binding<AccentChoice> {
+        Binding(
+            get: { AccentChoice(rawValue: accentRaw) ?? .default },
+            set: { accentRaw = $0.rawValue }
+        )
+    }
 
-            settingsDivider()
-
-            settingsToggle("Show idle pill", icon: "eye", isOn: $viewModel.showIdlePill)
-
-            settingsDivider()
-
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                settingsIcon("rectangle.topthird.inset.filled")
-                Text("Overlay position")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                Spacer()
-                Picker("", selection: $viewModel.overlayPosition) {
+    private var appearanceSection: some View {
+        Section {
+            LabeledContent("Accent color") {
+                AccentSwatchPicker(selection: accentBinding)
+            }
+            LabeledContent {
+                Picker("Dictation overlay", selection: $viewModel.overlayPosition) {
+                    Text("Notch").tag(OverlayPosition.top)
                     Text("Bottom").tag(OverlayPosition.bottom)
-                    Text("Top (Notch)").tag(OverlayPosition.top)
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
-                .controlSize(.regular)
-                .frame(width: 200)
+                .fixedSize()
+            } label: {
+                Text("Dictation overlay")
+                Text("Where the recording indicator appears.")
             }
-            .settingsRow()
+            Toggle(isOn: $viewModel.showIdlePill) {
+                Text("Show idle indicator")
+                Text(viewModel.overlayPosition == .top
+                     ? "Hover the notch to see your shortcut."
+                     : "A small handle at the bottom of the screen.")
+            }
+            Toggle("Show model name on cards", isOn: $showModelName)
         }
     }
 
     // MARK: - Dictation
 
     private var dictationSection: some View {
-        settingsCard("Dictation") {
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                settingsIcon("keyboard")
-                Text("Hotkey")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                Spacer()
+        Section {
+            LabeledContent("Shortcut") {
                 HotkeyRecorderView(trigger: $viewModel.hotkeyTrigger)
             }
-            .settingsRow()
 
-            settingsDivider()
+            Picker("Microphone", selection: $viewModel.selectedInputDeviceID) {
+                if let defaultName = viewModel.defaultInputDeviceName {
+                    Text("System Default (\(defaultName))").tag(UInt32(0))
+                } else {
+                    Text("System Default").tag(UInt32(0))
+                }
+                if !viewModel.availableInputDevices.isEmpty {
+                    Divider()
+                }
+                ForEach(viewModel.availableInputDevices) { device in
+                    Text(device.name).tag(device.id)
+                }
+            }
 
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                settingsIcon("mic.fill")
-                Text("Input device")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                Spacer()
-                Picker("", selection: $viewModel.selectedInputDeviceID) {
-                    if let defaultName = viewModel.defaultInputDeviceName {
-                        Text("System Default (\(defaultName))").tag(UInt32(0))
-                    } else {
-                        Text("System Default").tag(UInt32(0))
-                    }
-                    ForEach(viewModel.availableInputDevices) { device in
-                        Text(device.name).tag(device.id)
+            Toggle("Stop automatically on silence", isOn: $viewModel.silenceAutoStop)
+            if viewModel.silenceAutoStop {
+                LabeledContent("After") {
+                    HStack(spacing: DesignSystem.Spacing.sm) {
+                        Slider(value: $viewModel.silenceDelay, in: 1...10, step: 0.5)
+                            .frame(width: 160)
+                        Text(String(format: "%.1f s", viewModel.silenceDelay))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .frame(width: 40, alignment: .trailing)
                     }
                 }
-                .labelsHidden()
-                .frame(maxWidth: 250)
-            }
-            .settingsRow()
-
-            settingsDivider()
-
-            settingsToggle("Auto-stop on silence", icon: "stop.circle", isOn: $viewModel.silenceAutoStop)
-
-            if viewModel.silenceAutoStop {
-                settingsDivider()
-
-                settingsLabelValue("Silence delay", icon: "timer", value: String(format: "%.1fs", viewModel.silenceDelay))
-
-                Slider(value: $viewModel.silenceDelay, in: 1...10, step: 0.5)
-                .padding(.horizontal, DesignSystem.Spacing.md)
-                    .padding(.bottom, DesignSystem.Spacing.xs)
             }
 
-            settingsDivider()
-
-            settingsToggle("Stop only via UI button", icon: "hand.raised", isOn: $viewModel.stopOnlyViaUI)
-
-            settingsDivider()
-
-            settingsToggle("Sound effects", icon: "speaker.wave.2", isOn: $viewModel.dictationSoundEffects)
-
-            settingsDivider()
+            Toggle(isOn: $viewModel.stopOnlyViaUI) {
+                Text("Stop only from the overlay")
+                Text("The shortcut starts dictation; finish with the stop button.")
+            }
+            Toggle("Sound effects", isOn: $viewModel.dictationSoundEffects)
 
             if viewModel.screenRecordingGranted {
-                settingsToggle("Capture system audio", icon: "waveform.badge.mic", isOn: $viewModel.captureSystemAudio)
-
-                if viewModel.captureSystemAudio {
-                    Text("Records system audio (Zoom, Teams, etc.) alongside your microphone.")
-                        .font(DesignSystem.Typography.caption)
-                        .foregroundStyle(DesignSystem.Colors.textTertiary)
-                        .padding(.leading, DesignSystem.Spacing.md + 28)
-                        .padding(.trailing, DesignSystem.Spacing.md)
-                        .padding(.bottom, DesignSystem.Spacing.sm)
+                Toggle(isOn: $viewModel.captureSystemAudio) {
+                    Text("Capture system audio")
+                    Text("Record Zoom, Teams and other apps alongside your microphone.")
                 }
             } else {
-                HStack(spacing: DesignSystem.Spacing.sm) {
-                    settingsIcon("waveform.badge.mic")
-                    Text("Capture system audio")
-                        .font(DesignSystem.Typography.body)
-                        .foregroundStyle(DesignSystem.Colors.textSecondary)
-                    Spacer()
-                    Button("Grant Permission") {
+                LabeledContent {
+                    Button("Grant Access…") {
                         viewModel.openScreenRecordingSettings()
                     }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
+                } label: {
+                    Text("Capture system audio")
+                    Text("Requires Screen & System Audio Recording permission.")
                 }
-                .settingsRow()
-
-                Text("Requires Screen & System Audio Recording permission to capture Zoom, Teams, etc.")
-                    .font(DesignSystem.Typography.caption)
-                    .foregroundStyle(DesignSystem.Colors.textTertiary)
-                    .padding(.leading, DesignSystem.Spacing.md + 28)
-                    .padding(.trailing, DesignSystem.Spacing.md)
-                    .padding(.bottom, DesignSystem.Spacing.sm)
             }
+        }
+    }
+
+    // MARK: - Speech Model
+
+    private var modelBinding: Binding<String> {
+        Binding(
+            get: { viewModel.selectedModelID },
+            set: { viewModel.selectModel(id: $0) }
+        )
+    }
+
+    private var selectedModel: ModelInfo? {
+        viewModel.availableModels.first(where: { $0.id == viewModel.selectedModelID })
+    }
+
+    private var modelSection: some View {
+        Section {
+            if viewModel.availableModels.isEmpty {
+                LabeledContent("Model", value: "Parakeet TDT v3")
+            } else {
+                Picker(selection: modelBinding) {
+                    ForEach(viewModel.availableModels) { model in
+                        Text(model.name).tag(model.id)
+                    }
+                } label: {
+                    Text("Model")
+                    if let summary = selectedModel?.summary, !summary.isEmpty {
+                        Text(summary)
+                    }
+                }
+                .disabled(viewModel.parakeetRepairing)
+            }
+
+            LabeledContent("Status") {
+                HStack(spacing: DesignSystem.Spacing.sm) {
+                    if viewModel.parakeetRepairing {
+                        if let progress = viewModel.modelDownloadProgress,
+                           viewModel.parakeetStatusDetail.contains("%") {
+                            ProgressView(value: progress)
+                                .frame(width: 120)
+                        } else {
+                            ProgressView().controlSize(.small)
+                        }
+                    } else {
+                        modelStatusDot
+                    }
+                    Text(viewModel.parakeetStatusDetail)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+
+            if !viewModel.parakeetRepairing,
+               viewModel.parakeetStatus == .notDownloaded || viewModel.parakeetStatus == .failed {
+                HStack {
+                    Spacer()
+                    Button("Download / Repair Model") {
+                        viewModel.repairParakeetModel()
+                    }
+                }
+            }
+        }
+    }
+
+    private var modelStatusDot: some View {
+        let color: Color = switch viewModel.parakeetStatus {
+        case .ready: DesignSystem.Colors.successGreen
+        case .failed, .notDownloaded: DesignSystem.Colors.errorRed
+        case .notLoaded, .checking, .repairing: DesignSystem.Colors.warningAmber
+        case .unknown: DesignSystem.Colors.textTertiary
+        }
+        return Circle().fill(color).frame(width: 7, height: 7)
+    }
+
+    // MARK: - Permissions
+
+    private var permissionsSection: some View {
+        Section {
+            permissionRow(
+                "Microphone",
+                detail: "Hear your voice while dictating.",
+                granted: viewModel.microphoneGranted,
+                message: viewModel.microphoneResetMessage,
+                open: viewModel.openMicrophoneSettings,
+                request: viewModel.reRequestMicrophone
+            )
+            permissionRow(
+                "Accessibility",
+                detail: "Paste text into the app you're using.",
+                granted: viewModel.accessibilityGranted,
+                message: viewModel.accessibilityResetMessage,
+                open: viewModel.openAccessibilitySettings,
+                request: viewModel.reRequestAccessibility
+            )
+            permissionRow(
+                "Screen & System Audio",
+                detail: "Capture audio from Zoom, Teams and other apps.",
+                granted: viewModel.screenRecordingGranted,
+                message: nil,
+                open: viewModel.openScreenRecordingSettings,
+                request: viewModel.reRequestScreenRecording
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func permissionRow(
+        _ title: String,
+        detail: String,
+        granted: Bool,
+        message: String?,
+        open: @escaping () -> Void,
+        request: @escaping () -> Void
+    ) -> some View {
+        LabeledContent {
+            if granted {
+                Label("Allowed", systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(DesignSystem.Colors.successGreen)
+                    .contextMenu {
+                        Button("Open System Settings…", action: open)
+                    }
+            } else {
+                HStack(spacing: DesignSystem.Spacing.sm) {
+                    Button("Request", action: request)
+                    Button("Open Settings…", action: open)
+                        .buttonStyle(.borderedProminent)
+                        .tint(DesignSystem.Colors.accent)
+                }
+            }
+        } label: {
+            Text(title)
+            Text(detail)
+        }
+        if let message {
+            footnote(message)
         }
     }
 
     // MARK: - Storage
 
     private var storageSection: some View {
-        settingsCard("Storage") {
-            settingsToggle("Save dictation history", icon: "archivebox", isOn: $viewModel.saveDictationHistory)
-
-            settingsDivider()
-
-            settingsToggle("Save audio recordings", icon: "waveform", isOn: $viewModel.saveAudioRecordings)
-
-            settingsDivider()
-
-            settingsToggle("Save transcription audio", icon: "mic", isOn: $viewModel.saveTranscriptionAudio)
-
-            settingsDivider()
-
-            settingsToggle("Show model name on cards", icon: "tag", isOn: $showModelName)
-
-            settingsDivider()
-
-            settingsLabelValue("Dictations", icon: "doc.text", value: "\(viewModel.dictationCount)")
-
-            settingsDivider()
-
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                Button(role: .destructive) {
-                    showClearDictationsAlert = true
-                } label: {
-                    Text("Clear All Dictations...")
-                        .font(DesignSystem.Typography.body)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-
-                Button(role: .destructive) {
+        Section {
+            Toggle("Save dictation history", isOn: $viewModel.saveDictationHistory)
+            Toggle("Keep dictation audio", isOn: $viewModel.saveAudioRecordings)
+            Toggle("Keep transcription audio", isOn: $viewModel.saveTranscriptionAudio)
+            LabeledContent("Saved dictations") {
+                Text("\(viewModel.dictationCount)")
+                    .monospacedDigit()
+            }
+            HStack {
+                Spacer()
+                Button("Reset Private Stats…", role: .destructive) {
                     showClearStatsAlert = true
-                } label: {
-                    Text("Reset Private Stats...")
-                        .font(DesignSystem.Typography.body)
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.regular)
-            }
-            .padding(.horizontal, DesignSystem.Spacing.md)
-            .padding(.vertical, DesignSystem.Spacing.sm)
-        }
-    }
-
-    // MARK: - Permissions
-
-    private var permissionsSection: some View {
-        settingsCard("Permissions") {
-            // Microphone row
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                settingsIcon("mic.fill")
-                Text("Microphone")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                Spacer()
-                Button("Open System Settings") {
-                    viewModel.openMicrophoneSettings()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                if !viewModel.microphoneGranted {
-                    Button("Re-request") {
-                        viewModel.reRequestMicrophone()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-                HStack(spacing: DesignSystem.Spacing.xs) {
-                    Circle()
-                        .fill(viewModel.microphoneGranted ? DesignSystem.Colors.successGreen : DesignSystem.Colors.errorRed)
-                        .frame(width: 8, height: 8)
-                    Text(viewModel.microphoneGranted ? "Granted" : "Not Granted")
-                        .font(DesignSystem.Typography.bodySmall)
-                        .foregroundStyle(viewModel.microphoneGranted ? DesignSystem.Colors.successGreen : DesignSystem.Colors.errorRed)
+                Button("Clear All Dictations…", role: .destructive) {
+                    showClearDictationsAlert = true
                 }
             }
-            .settingsRow()
-
-            if let message = viewModel.microphoneResetMessage {
-                Text(message)
-                    .font(DesignSystem.Typography.caption)
-                    .foregroundStyle(DesignSystem.Colors.textTertiary)
-                    .padding(.leading, DesignSystem.Spacing.md + 28)
-                    .padding(.trailing, DesignSystem.Spacing.md)
-                    .padding(.bottom, DesignSystem.Spacing.sm)
-            }
-
-            settingsDivider()
-
-            // Accessibility row
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                settingsIcon("accessibility")
-                Text("Accessibility")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                Spacer()
-                Button("Open System Settings") {
-                    viewModel.openAccessibilitySettings()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                if !viewModel.accessibilityGranted {
-                    Button("Re-request") {
-                        viewModel.reRequestAccessibility()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-                HStack(spacing: DesignSystem.Spacing.xs) {
-                    Circle()
-                        .fill(viewModel.accessibilityGranted ? DesignSystem.Colors.successGreen : DesignSystem.Colors.errorRed)
-                        .frame(width: 8, height: 8)
-                    Text(viewModel.accessibilityGranted ? "Granted" : "Not Granted")
-                        .font(DesignSystem.Typography.bodySmall)
-                        .foregroundStyle(viewModel.accessibilityGranted ? DesignSystem.Colors.successGreen : DesignSystem.Colors.errorRed)
-                }
-            }
-            .settingsRow()
-
-            if let message = viewModel.accessibilityResetMessage {
-                Text(message)
-                    .font(DesignSystem.Typography.caption)
-                    .foregroundStyle(DesignSystem.Colors.textTertiary)
-                    .padding(.leading, DesignSystem.Spacing.md + 28)
-                    .padding(.trailing, DesignSystem.Spacing.md)
-                    .padding(.bottom, DesignSystem.Spacing.sm)
-            }
-
-            settingsDivider()
-
-            // Screen Recording row
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                settingsIcon("rectangle.dashed.badge.record")
-                Text("Screen & System Audio")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                Spacer()
-                Button("Open System Settings") {
-                    viewModel.openScreenRecordingSettings()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                if !viewModel.screenRecordingGranted {
-                    Button("Re-request") {
-                        viewModel.reRequestScreenRecording()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                }
-                HStack(spacing: DesignSystem.Spacing.xs) {
-                    Circle()
-                        .fill(viewModel.screenRecordingGranted ? DesignSystem.Colors.successGreen : DesignSystem.Colors.errorRed)
-                        .frame(width: 8, height: 8)
-                    Text(viewModel.screenRecordingGranted ? "Granted" : "Not Granted")
-                        .font(DesignSystem.Typography.bodySmall)
-                        .foregroundStyle(viewModel.screenRecordingGranted ? DesignSystem.Colors.successGreen : DesignSystem.Colors.errorRed)
-                }
-            }
-            .settingsRow()
-
-            if !viewModel.screenRecordingGranted {
-                Text("Required for capturing system audio (Zoom, Teams, etc.) during dictation.")
-                    .font(DesignSystem.Typography.caption)
-                    .foregroundStyle(DesignSystem.Colors.textTertiary)
-                    .padding(.leading, DesignSystem.Spacing.md + 28)
-                    .padding(.trailing, DesignSystem.Spacing.md)
-                    .padding(.bottom, DesignSystem.Spacing.sm)
-            }
-        }
-    }
-
-    // MARK: - Model
-
-    private var modelSection: some View {
-        settingsCard("Speech Model") {
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                settingsIcon("cpu")
-                if viewModel.availableModels.isEmpty {
-                    Text("Parakeet TDT v3")
-                        .font(DesignSystem.Typography.body)
-                        .foregroundStyle(DesignSystem.Colors.textPrimary)
-                } else {
-                    let selectedName = viewModel.availableModels
-                        .first(where: { $0.id == viewModel.selectedModelID })?.name ?? "Unknown"
-                    ModelSelectorView(
-                        currentModel: selectedName,
-                        displayName: selectedName,
-                        availableModels: viewModel.availableModels.map(\.name),
-                        disabled: viewModel.parakeetRepairing,
-                        onSelect: { name in
-                            if let model = viewModel.availableModels.first(where: { $0.name == name }) {
-                                viewModel.selectModel(id: model.id)
-                            }
-                        }
-                    )
-                }
-                Spacer()
-                if !viewModel.parakeetRepairing {
-                    Text(viewModel.parakeetStatusDetail)
-                        .foregroundStyle(DesignSystem.Colors.textSecondary)
-                        .font(DesignSystem.Typography.caption)
-                }
-            }
-            .settingsRow()
-
-            if viewModel.parakeetRepairing, let progress = viewModel.modelDownloadProgress {
-                Text(viewModel.parakeetStatusDetail)
-                    .font(DesignSystem.Typography.caption)
-                    .foregroundStyle(DesignSystem.Colors.textSecondary)
-                    .frame(maxWidth: .infinity, alignment: .center)
-                if viewModel.parakeetStatusDetail.contains("%") {
-                    ProgressView(value: progress)
-                        .tint(.green)
-                        .padding(.horizontal, DesignSystem.Spacing.sm)
-                        .padding(.bottom, DesignSystem.Spacing.sm)
-                } else {
-                    ProgressView()
-                        .tint(.green)
-                        .padding(.horizontal, DesignSystem.Spacing.sm)
-                        .padding(.bottom, DesignSystem.Spacing.sm)
-                }
-            }
-
-            if let selectedModel = viewModel.availableModels.first(where: { $0.id == viewModel.selectedModelID }),
-               !selectedModel.summary.isEmpty,
-               !viewModel.parakeetRepairing {
-                HStack(spacing: DesignSystem.Spacing.sm) {
-                    Text(selectedModel.summary)
-                        .font(DesignSystem.Typography.caption)
-                        .foregroundStyle(DesignSystem.Colors.textSecondary)
-                    Spacer()
-                    if (viewModel.parakeetStatus == .notDownloaded || viewModel.parakeetStatus == .failed) {
-                        Button("Download / Repair Model") {
-                            viewModel.repairParakeetModel()
-                        }
-                        .font(DesignSystem.Typography.caption)
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                    }
-                }
-                .padding(.horizontal, DesignSystem.Spacing.md)
-                .padding(.bottom, DesignSystem.Spacing.sm)
-            }
-        }
-    }
-
-    // MARK: - About
-
-    private var aboutSection: some View {
-        settingsCard("About") {
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                settingsIcon("info.circle")
-                Text("Hush")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                Spacer()
-                Text("Local-first voice transcription")
-                    .foregroundStyle(DesignSystem.Colors.textSecondary)
-                    .font(DesignSystem.Typography.bodySmall)
-            }
-            .settingsRow()
-
-            settingsDivider()
-
-            Text("All speech recognition runs on-device using Apple's Neural Engine. Your audio never leaves your Mac.")
-                .font(DesignSystem.Typography.caption)
-                .foregroundStyle(DesignSystem.Colors.textTertiary)
-                .padding(.leading, DesignSystem.Spacing.md + 28)
-                .padding(.trailing, DesignSystem.Spacing.md)
-                .padding(.vertical, DesignSystem.Spacing.sm)
         }
     }
 
     // MARK: - Diagnostics
 
     private var diagnosticsSection: some View {
-        settingsCard("Diagnostics") {
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                settingsIcon("doc.text")
-                Text("Log File")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                Spacer()
-                Button("Reveal") {
+        Section {
+            LabeledContent("Log file") {
+                Button("Reveal in Finder") {
                     viewModel.openLogFile()
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
                 .disabled(!viewModel.logFileExists)
             }
-            .settingsRow()
-
-            settingsDivider()
-
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                settingsIcon("folder")
-                Text("Logs Folder")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                Spacer()
+            LabeledContent("Logs folder") {
                 Button("Open") {
                     viewModel.openLogFolder()
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
-            .settingsRow()
-
-            settingsDivider()
-
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                settingsIcon("folder.badge.gearshape")
-                Text("App Data Folder")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                Spacer()
+            LabeledContent("App data folder") {
                 Button("Open") {
                     viewModel.openAppSupportFolder()
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
-            .settingsRow()
-
-            settingsDivider()
-
-            HStack(spacing: DesignSystem.Spacing.sm) {
-                settingsIcon("arrow.counterclockwise")
-                Text("Reset Onboarding")
-                    .font(DesignSystem.Typography.body)
-                    .foregroundStyle(DesignSystem.Colors.textPrimary)
-                Spacer()
-                Button("Reset") {
+            LabeledContent("Onboarding") {
+                Button("Show Again") {
                     viewModel.resetOnboarding()
                 }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
             }
-            .settingsRow()
-
-            Text("Diagnostic logs help troubleshoot issues like missing recordings. The log file persists across app restarts.")
-                .font(DesignSystem.Typography.caption)
-                .foregroundStyle(DesignSystem.Colors.textTertiary)
-                .padding(.leading, DesignSystem.Spacing.md + 28)
-                .padding(.trailing, DesignSystem.Spacing.md)
-                .padding(.bottom, DesignSystem.Spacing.sm)
+        } header: {
+            Text("Diagnostics")
+        } footer: {
+            footer("Logs help troubleshoot issues like missing recordings and persist across restarts.")
         }
     }
 
-    // MARK: - Reusable Components
+    // MARK: - About
 
-    private func settingsCard(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(DesignSystem.Typography.sectionHeader)
-                .foregroundStyle(.primary)
-                .padding(.horizontal, DesignSystem.Spacing.xs)
-                .padding(.bottom, DesignSystem.Spacing.sm)
-
-            VStack(alignment: .leading, spacing: 0) {
-                content()
+    private var aboutSection: some View {
+        Section {
+            HStack(spacing: DesignSystem.Spacing.md) {
+                BrandWaveformView(size: 28, color: DesignSystem.Colors.accent)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .fill(DesignSystem.Colors.accent.opacity(0.12))
+                    )
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Hush")
+                        .font(.headline)
+                    Text("Local-first voice transcription")
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                if let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String {
+                    Text("Version \(version)")
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
             }
+            .padding(.vertical, 4)
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func footnote(_ text: String, color: Color = .secondary) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(color)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func footer(_ text: String) -> some View {
+        Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: DesignSystem.Layout.cardCornerRadius)
-                    .fill(DesignSystem.Colors.cardBackground)
-                    .cardShadow(DesignSystem.Shadows.cardRest)
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: DesignSystem.Layout.cardCornerRadius)
-                    .strokeBorder(DesignSystem.Colors.border.opacity(0.6), lineWidth: 0.5)
-            )
-        }
-    }
-
-    @ViewBuilder
-    private func settingsIcon(_ name: String) -> some View {
-        if name == "waveform" {
-            BrandWaveformView(size: 14, color: DesignSystem.Colors.textSecondary)
-                .frame(width: 20, alignment: .center)
-        } else {
-            Image(systemName: name)
-                .font(.system(size: 14))
-                .foregroundStyle(DesignSystem.Colors.textSecondary)
-                .frame(width: 20, alignment: .center)
-        }
-    }
-
-    private func settingsToggle(_ label: String, icon: String, isOn: Binding<Bool>) -> some View {
-        HStack(spacing: DesignSystem.Spacing.sm) {
-            settingsIcon(icon)
-            Text(label)
-                .font(DesignSystem.Typography.body)
-            Spacer()
-            Toggle("", isOn: isOn)
-                .labelsHidden()
-        }
-        .settingsRow()
-    }
-
-    private func settingsLabelValue(_ label: String, icon: String, value: String) -> some View {
-        HStack(spacing: DesignSystem.Spacing.sm) {
-            settingsIcon(icon)
-            Text(label)
-                .font(DesignSystem.Typography.body)
-                .foregroundStyle(DesignSystem.Colors.textPrimary)
-            Spacer()
-            Text(value)
-                .font(DesignSystem.Typography.body)
-                .foregroundStyle(DesignSystem.Colors.textSecondary)
-        }
-        .settingsRow()
-    }
-
-    private func settingsDivider() -> some View {
-        Divider()
-            .foregroundStyle(DesignSystem.Colors.divider)
-            .padding(.leading, DesignSystem.Spacing.md + 28)
-    }
-}
-
-// MARK: - Settings Row Modifier
-
-private struct SettingsRowModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .font(DesignSystem.Typography.body)
-            .padding(.horizontal, DesignSystem.Spacing.md)
-            .padding(.vertical, DesignSystem.Spacing.sm)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-private extension View {
-    func settingsRow() -> some View {
-        modifier(SettingsRowModifier())
     }
 }
 
@@ -650,7 +460,6 @@ struct SettingsView_Previews: PreviewProvider {
             defaults: .init(suiteName: "SettingsPreview")!,
             isSpeechModelCached: { false }
         ))
-        .frame(width: 480, height: 700)
-        .padding()
+        .frame(width: 640, height: 900)
     }
 }

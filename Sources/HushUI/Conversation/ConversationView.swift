@@ -13,6 +13,7 @@ public struct ConversationView: View {
     }
 
     public var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: DesignSystem.Spacing.lg) {
             HStack {
                 Text("Listen locally, draft with Ollama, and reply in your voice.")
@@ -74,26 +75,24 @@ public struct ConversationView: View {
                 }
             }
 
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
-                    if viewModel.remoteTurns.isEmpty {
-                        Text(emptyStateText)
-                            .foregroundStyle(DesignSystem.Colors.textTertiary)
-                            .frame(maxWidth: .infinity, minHeight: 180, alignment: .center)
-                    } else {
-                        ForEach(Array(viewModel.remoteTurns.enumerated()), id: \.offset) { _, turn in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("THEM")
-                                    .font(DesignSystem.Typography.caption.weight(.semibold))
-                                    .foregroundStyle(DesignSystem.Colors.textTertiary)
-                                Text(turn)
-                                    .font(DesignSystem.Typography.body)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(DesignSystem.Spacing.md)
-                            .background(DesignSystem.Colors.cardBackground)
-                            .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Layout.cardCornerRadius))
+            LazyVStack(alignment: .leading, spacing: DesignSystem.Spacing.sm) {
+                if viewModel.remoteTurns.isEmpty {
+                    Text(emptyStateText)
+                        .foregroundStyle(DesignSystem.Colors.textTertiary)
+                        .frame(maxWidth: .infinity, minHeight: 180, alignment: .center)
+                } else {
+                    ForEach(Array(viewModel.remoteTurns.enumerated()), id: \.offset) { _, turn in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("THEM")
+                                .font(DesignSystem.Typography.caption.weight(.semibold))
+                                .foregroundStyle(DesignSystem.Colors.textTertiary)
+                            Text(turn)
+                                .font(DesignSystem.Typography.body)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(DesignSystem.Spacing.md)
+                        .background(DesignSystem.Colors.cardBackground)
+                        .clipShape(RoundedRectangle(cornerRadius: DesignSystem.Layout.cardCornerRadius))
                     }
                 }
             }
@@ -120,12 +119,8 @@ public struct ConversationView: View {
             }
         }
         .padding(DesignSystem.Spacing.lg)
-        .navigationTitle("Conversation")
-        .toolbar {
-            ToolbarItem(placement: .automatic) {
-                Color.clear.frame(width: 0, height: 0)
-            }
         }
+        .navigationTitle("Conversation")
         .fileImporter(
             isPresented: $choosingReference,
             allowedContentTypes: [.wav],

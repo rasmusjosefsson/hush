@@ -5,61 +5,60 @@ import SwiftUI
 struct TranscriptResultView: View {
     let transcription: Transcription
     @Bindable var viewModel: TranscriptionViewModel
-    var onNavigateBack: (() -> Void)?
 
     @State private var copiedToClipboard = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack {
-                if onNavigateBack != nil {
-                    Button {
-                        viewModel.currentTranscription = nil
-                        onNavigateBack?()
-                    } label: {
-                        Label("Back", systemImage: "chevron.left")
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                VStack(alignment: .leading, spacing: 2) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
+                // File header scrolls with the transcript, like a document title.
+                VStack(alignment: .leading, spacing: 3) {
                     Text(transcription.fileName)
-                        .font(DesignSystem.Typography.body.weight(.semibold))
-                        .lineLimit(1)
+                        .font(.headline)
+                        .lineLimit(2)
                         .truncationMode(.middle)
 
                     HStack(spacing: DesignSystem.Spacing.sm) {
                         if let duration = transcription.durationMs {
                             Text(formatDuration(duration))
-                                .font(DesignSystem.Typography.caption)
-                                .foregroundStyle(.secondary)
                         }
-
                         if let count = transcription.speakerCount, count > 0 {
                             Text("•")
-                                .foregroundStyle(.tertiary)
                             Text("\(count) speaker\(count == 1 ? "" : "s")")
-                                .font(DesignSystem.Typography.caption)
-                                .foregroundStyle(.secondary)
                         }
                     }
+                    .font(DesignSystem.Typography.caption)
+                    .foregroundStyle(.secondary)
                 }
+                .padding(.bottom, DesignSystem.Spacing.sm)
 
-                Spacer()
-
-                Menu("Download") {
+                if let speakers = transcription.speakers, !speakers.isEmpty,
+                   let words = transcription.wordTimestamps, !words.isEmpty {
+                    // Speaker-annotated transcript
+                    speakerTranscript(speakers: speakers, words: words)
+                } else {
+                    // Plain transcript
+                    Text(transcription.cleanTranscript ?? transcription.rawTranscript ?? "No transcript available.")
+                        .font(DesignSystem.Typography.body)
+                        .textSelection(.enabled)
+                }
+            }
+            .padding(DesignSystem.Spacing.lg)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Menu {
                     Button("Plain Text (.txt)") {
                         viewModel.downloadTranscriptionAsTxt(transcription)
                     }
-
                     Button("Markdown (.md)") {
                         viewModel.downloadTranscriptionAsMarkdown(transcription)
                     }
+                } label: {
+                    Label("Download", systemImage: "arrow.down.circle")
                 }
-                .menuStyle(.borderlessButton)
 
-                // Copy button
                 Button {
                     viewModel.copyToClipboard(transcription)
                     copiedToClipboard = true
@@ -67,29 +66,8 @@ struct TranscriptResultView: View {
                         copiedToClipboard = false
                     }
                 } label: {
-                    Label(copiedToClipboard ? "Copied!" : "Copy", systemImage: copiedToClipboard ? "checkmark" : "doc.on.doc")
+                    Label(copiedToClipboard ? "Copied" : "Copy", systemImage: copiedToClipboard ? "checkmark" : "doc.on.doc")
                 }
-                .buttonStyle(.bordered)
-            }
-            .padding(DesignSystem.Spacing.lg)
-
-            Divider()
-
-            // Transcript content
-            ScrollView {
-                VStack(alignment: .leading, spacing: DesignSystem.Spacing.md) {
-                    if let speakers = transcription.speakers, !speakers.isEmpty,
-                       let words = transcription.wordTimestamps, !words.isEmpty {
-                        // Speaker-annotated transcript
-                        speakerTranscript(speakers: speakers, words: words)
-                    } else {
-                        // Plain transcript
-                        Text(transcription.cleanTranscript ?? transcription.rawTranscript ?? "No transcript available.")
-                            .font(DesignSystem.Typography.body)
-                            .textSelection(.enabled)
-                    }
-                }
-                .padding(DesignSystem.Spacing.lg)
             }
         }
     }

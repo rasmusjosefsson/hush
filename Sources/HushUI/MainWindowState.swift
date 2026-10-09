@@ -4,36 +4,44 @@ import SwiftUI
 @MainActor
 @Observable
 public final class MainWindowState {
-    public var selectedItem: SidebarItem = .transcribe
+    public var selectedItem: SidebarItem = .transcribe {
+        didSet {
+            guard oldValue != selectedItem, !isTraversingHistory else { return }
+            backStack.append(oldValue)
+            forwardStack.removeAll()
+        }
+    }
+    private var backStack: [SidebarItem] = []
+    private var forwardStack: [SidebarItem] = []
+    private var isTraversingHistory = false
+
+    public var canGoBack: Bool { !backStack.isEmpty }
+    public var canGoForward: Bool { !forwardStack.isEmpty }
+
+    public func goBack() {
+        guard let item = backStack.popLast() else { return }
+        forwardStack.append(selectedItem)
+        traverse(to: item)
+    }
+
+    public func goForward() {
+        guard let item = forwardStack.popLast() else { return }
+        backStack.append(selectedItem)
+        traverse(to: item)
+    }
+
+    private func traverse(to item: SidebarItem) {
+        isTraversingHistory = true
+        selectedItem = item
+        isTraversingHistory = false
+    }
     public var showingProgressDetail = false
-
-
-    /// The sidebar item the user was on before navigating into a transcription detail.
-    /// Used by the back button to return to the originating page (e.g. Library).
-    public var previousItem: SidebarItem?
 
     public init() {}
 
-    /// Navigate to the Transcribe tab to show a transcription detail,
-    /// remembering where the user came from so back returns there.
-    public func navigateToTranscription(from current: SidebarItem? = nil) {
-        let origin = current ?? selectedItem
-        // Only save if we're navigating away from a different tab
-        if origin != .transcribe {
-            previousItem = origin
-        } else {
-            previousItem = nil
-        }
+    /// Navigate to the Transcribe tab to show a transcription detail.
+    public func navigateToTranscription() {
         selectedItem = .transcribe
-    }
-
-    /// Return to the previous sidebar item (if any) after pressing back.
-    public func navigateBack() {
-        if let prev = previousItem {
-            selectedItem = prev
-            previousItem = nil
-        }
-        // If no previousItem, we were already on Transcribe — just clear the transcription
     }
 }
 
